@@ -4,7 +4,7 @@ from typing import List
 
 import torch
 import torch.nn as nn
-
+import torch.nn.init as init
 from pythae.models.nn import BaseDecoder, BaseDiscriminator, BaseEncoder
 
 from ....base import BaseAEConfig
@@ -160,6 +160,128 @@ class Encoder_Conv_AE_MNIST(BaseEncoder):
         return output
 
 
+class VAE_3DShapes(nn.Module):
+    """Encoder and Decoder architecture for 3D Shapes, Celeba, Chairs data."""
+    def __init__(self, z_dim=10):
+        super(VAE_3DShapes, self).__init__()
+        self.z_dim = z_dim
+        self.encode = nn.Sequential(
+            nn.Conv2d(3, 32, 4, 2, 1),
+            nn.ReLU(True),
+            nn.Conv2d(32, 32, 4, 2, 1),
+            nn.ReLU(True),
+            nn.Conv2d(32, 64, 4, 2, 1),
+            nn.ReLU(True),
+            nn.Conv2d(64, 64, 4, 2, 1),
+            nn.ReLU(True),
+            nn.Conv2d(64, 256, 4, 1),
+            nn.ReLU(True),
+            nn.Conv2d(256, 2*z_dim, 1)
+        )
+        self.decode = nn.Sequential(
+            nn.Conv2d(z_dim, 256, 1),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(256, 64, 4),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(64, 64, 4, 2, 1),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(64, 32, 4, 2, 1),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(32, 32, 4, 2, 1),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(32, 3, 4, 2, 1),
+        )
+        self.weight_init()
+
+    def weight_init(self, mode='normal'):
+        if mode == 'kaiming':
+            initializer = kaiming_init
+        elif mode == 'normal':
+            initializer = normal_init
+
+        for block in self._modules:
+            for m in self._modules[block]:
+                initializer(m)
+
+    def reparametrize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def forward(self, x, no_dec=False):
+        stats = self.encode(x)
+        mu = stats[:, :self.z_dim]
+        logvar = stats[:, self.z_dim:]
+        z = self.reparametrize(mu, logvar)
+
+        if no_dec:
+            return z.squeeze()
+        else:
+            x_recon = self.decode(z)
+            return x_recon, mu, logvar, z.squeeze()
+
+
+class FactorVAE1(nn.Module):
+    """Encoder and Decoder architecture for 2D Shapes data."""
+    def __init__(self, z_dim=10):
+        super(FactorVAE1, self).__init__()
+        self.z_dim = z_dim
+        self.encode = nn.Sequential(
+            nn.Conv2d(1, 32, 4, 2, 1),
+            nn.ReLU(True),
+            nn.Conv2d(32, 32, 4, 2, 1),
+            nn.ReLU(True),
+            nn.Conv2d(32, 64, 4, 2, 1),
+            nn.ReLU(True),
+            nn.Conv2d(64, 64, 4, 2, 1),
+            nn.ReLU(True),
+            nn.Conv2d(64, 128, 4, 1),
+            nn.ReLU(True),
+            nn.Conv2d(128, 2*z_dim, 1)
+        )
+        self.decode = nn.Sequential(
+            nn.Conv2d(z_dim, 128, 1),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(128, 64, 4),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(64, 64, 4, 2, 1),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(64, 32, 4, 2, 1),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(32, 32, 4, 2, 1),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(32, 1, 4, 2, 1),
+        )
+        self.weight_init()
+
+    def weight_init(self, mode='normal'):
+        if mode == 'kaiming':
+            initializer = kaiming_init
+        elif mode == 'normal':
+            initializer = normal_init
+
+        for block in self._modules:
+            for m in self._modules[block]:
+                initializer(m)
+
+    def reparametrize(self, mu, logvar):
+        std = logvar.mul(0.5).exp_()
+        eps = std.data.new(std.size()).normal_()
+        return eps.mul(std).add_(mu)
+
+    def forward(self, x, no_dec=False):
+        stats = self.encode(x)
+        mu = stats[:, :self.z_dim]
+        logvar = stats[:, self.z_dim:]
+        z = self.reparametrize(mu, logvar)
+
+        if no_dec:
+            return z.squeeze()
+        else:
+            x_recon = self.decode(z).view(x.size())
+            return x_recon, mu, logvar, z.squeeze()
+
+
 class Encoder_Conv_VAE_MNIST(BaseEncoder):
     """
     A Convolutional encoder suited for MNIST and Variational Autoencoder-based
@@ -268,6 +390,120 @@ class Encoder_Conv_VAE_MNIST(BaseEncoder):
 
         self.embedding = nn.Linear(1024, args.latent_dim)
         self.log_var = nn.Linear(1024, args.latent_dim)
+
+    def forward(self, x: torch.Tensor, output_layer_levels: List[int] = None):
+        """Forward method
+
+        Args:
+            output_layer_levels (List[int]): The levels of the layers where the outputs are
+                extracted. If None, the last layer's output is returned. Default: None.
+
+        Returns:
+            ModelOutput: An instance of ModelOutput containing the embeddings of the input data
+            under the key `embedding` and the **log** of the diagonal coefficient of the covariance
+            matrices under the key `log_covariance`. Optional: The outputs of the layers specified
+            in `output_layer_levels` arguments are available under the keys `embedding_layer_i`
+            where i is the layer's level."""
+        output = ModelOutput()
+
+        max_depth = self.depth
+
+        if output_layer_levels is not None:
+
+            assert all(
+                self.depth >= levels > 0 or levels == -1
+                for levels in output_layer_levels
+            ), (
+                f"Cannot output layer deeper than depth ({self.depth})."
+                f"Got ({output_layer_levels})"
+            )
+
+            if -1 in output_layer_levels:
+                max_depth = self.depth
+            else:
+                max_depth = max(output_layer_levels)
+
+        out = x
+
+        for i in range(max_depth):
+            out = self.layers[i](out)
+
+            if output_layer_levels is not None:
+                if i + 1 in output_layer_levels:
+                    output[f"embedding_layer_{i+1}"] = out
+
+            if i + 1 == self.depth:
+                output["embedding"] = self.embedding(out.reshape(x.shape[0], -1))
+                output["log_covariance"] = self.log_var(out.reshape(x.shape[0], -1))
+
+        return output
+
+class Encoder_Conv_VAE_DSPRITES(BaseEncoder):
+    """<
+    A Convolutional encoder suited for MNIST and Variational Autoencoder-based
+    models. """
+
+
+
+    def __init__(self, args: BaseAEConfig):
+        BaseEncoder.__init__(self)
+
+        self.input_dim = (1, 64, 64)
+        self.latent_dim = args.latent_dim
+        self.n_channels = 1
+
+        layers = nn.ModuleList()
+
+        layers.append(
+            nn.Sequential(
+                nn.Conv2d(self.n_channels, 32, 4, 2, 1),
+                nn.BatchNorm2d(32),
+                nn.ReLU(),
+            )
+        )
+
+        layers.append(
+            nn.Sequential(
+                nn.Conv2d(32, 32, 4, 2, 1), nn.BatchNorm2d(32), nn.ReLU()
+            )
+        )
+
+        layers.append(
+            nn.Sequential(
+                nn.Conv2d(32, 64, 4, 2, 1), nn.BatchNorm2d(64), nn.ReLU()
+            )
+        )
+
+        layers.append(
+            nn.Sequential(
+                nn.Conv2d(64, 64, 4, 2, 1), nn.BatchNorm2d(64), nn.ReLU()
+            )
+        )
+
+        layers.append(
+            nn.Sequential(
+                nn.Conv2d(64, 128, 4, 1), nn.BatchNorm2d(128), nn.ReLU()
+            )
+        )
+
+
+        self.layers = layers
+        self.depth = len(layers)
+
+        self.embedding = nn.Linear(128, args.latent_dim)
+        self.log_var = nn.Linear(128, args.latent_dim)
+
+        self.weight_init()
+
+    def weight_init(self, mode='normal'):
+        if mode == 'kaiming':
+            initializer = kaiming_init
+        elif mode == 'normal':
+            initializer = normal_init
+
+        for block in self._modules:
+            for m in self._modules[block]:
+                initializer(m)
 
     def forward(self, x: torch.Tensor, output_layer_levels: List[int] = None):
         """Forward method
@@ -617,6 +853,128 @@ class Decoder_Conv_AE_MNIST(BaseDecoder):
         return output
 
 
+ #self.decode = nn.Sequential(
+        #    nn.Conv2d(z_dim, 128, 1),
+        #    nn.ReLU(True),
+        #    nn.ConvTranspose2d(128, 64, 4),
+        #    nn.ReLU(True),
+        #    nn.ConvTranspose2d(64, 64, 4, 2, 1),
+        #    nn.ReLU(True),
+        #    nn.ConvTranspose2d(64, 32, 4, 2, 1),
+        #    nn.ReLU(True),
+        #    nn.ConvTranspose2d(32, 32, 4, 2, 1),
+        #    nn.ReLU(True),
+        #    nn.ConvTranspose2d(32, 1, 4, 2, 1),
+        #)
+
+class Decoder_Conv_AE_DSPRITES(BaseDecoder):
+    """
+    A Convolutional decoder suited for DSPRITES and Autoencoder-based
+    models. """
+
+
+    def __init__(self, args: dict):
+        BaseDecoder.__init__(self)
+        self.input_dim = (1, 64, 64)
+        self.latent_dim = args.latent_dim
+        self.n_channels = 1
+
+        layers = nn.ModuleList()
+
+        layers.append(nn.Linear(args.latent_dim, 128 * 4 * 4))
+
+        layers.append(
+            nn.Sequential(
+                nn.ConvTranspose2d(128, 64, 4),
+                nn.BatchNorm2d(64),
+                nn.ReLU(),
+            )
+        )
+
+        layers.append(
+            nn.Sequential(
+                nn.ConvTranspose2d(64, 64, 4, 2, padding=1),
+                nn.BatchNorm2d(64),
+                nn.ReLU(),
+            )
+        )
+
+        layers.append(
+            nn.Sequential(
+                nn.ConvTranspose2d(64, 32, 4, 2, padding=1),
+                nn.BatchNorm2d(32),
+                nn.ReLU(),
+            )
+        )
+
+        layers.append(
+            nn.Sequential(
+                nn.ConvTranspose2d(32, 32, 4, 2, padding=1),
+                nn.BatchNorm2d(32),
+                nn.ReLU(),
+            )
+        )
+
+        layers.append(
+            nn.Sequential(
+                nn.ConvTranspose2d(32, 1, 4, 2, padding=1),
+                nn.Sigmoid(),
+            )
+        )
+
+        self.layers = layers
+        self.depth = len(layers)
+
+    def forward(self, z: torch.Tensor, output_layer_levels: List[int] = None):
+        """Forward method
+
+        Args:
+            output_layer_levels (List[int]): The levels of the layers where the outputs are
+                extracted. If None, the last layer's output is returned. Default: None.
+
+        Returns:
+            ModelOutput: An instance of ModelOutput containing the reconstruction of the latent code
+            under the key `reconstruction`. Optional: The outputs of the layers specified in
+            `output_layer_levels` arguments are available under the keys `reconstruction_layer_i`
+            where i is the layer's level.
+        """
+        output = ModelOutput()
+
+        max_depth = self.depth
+
+        if output_layer_levels is not None:
+
+            assert all(
+                self.depth >= levels > 0 or levels == -1
+                for levels in output_layer_levels
+            ), (
+                f"Cannot output layer deeper than depth ({self.depth})."
+                f"Got ({output_layer_levels})"
+            )
+
+            if -1 in output_layer_levels:
+                max_depth = self.depth
+            else:
+                max_depth = max(output_layer_levels)
+
+        out = z
+
+        for i in range(max_depth):
+            out = self.layers[i](out)
+
+            if i == 0:
+                out = out.reshape(z.shape[0], 128, 4, 4)
+
+            if output_layer_levels is not None:
+                if i + 1 in output_layer_levels:
+                    output[f"reconstruction_layer_{i+1}"] = out
+
+            if i + 1 == self.depth:
+                output["reconstruction"] = out
+
+        return output
+
+
 class Discriminator_Conv_MNIST(BaseDiscriminator):
     """
     A Convolutional discriminator suited for MNIST.
@@ -759,3 +1117,24 @@ class Discriminator_Conv_MNIST(BaseDiscriminator):
                 output["embedding"] = out
 
         return output
+
+def kaiming_init(m):
+    if isinstance(m, (nn.Linear, nn.Conv2d)):
+        init.kaiming_normal_(m.weight)
+        if m.bias is not None:
+            m.bias.data.fill_(0)
+    elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
+        m.weight.data.fill_(1)
+        if m.bias is not None:
+            m.bias.data.fill_(0)
+
+
+def normal_init(m):
+    if isinstance(m, (nn.Linear, nn.Conv2d)):
+        init.normal_(m.weight, 0, 0.02)
+        if m.bias is not None:
+            m.bias.data.fill_(0)
+    elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
+        m.weight.data.fill_(1)
+        if m.bias is not None:
+            m.bias.data.fill_(0)

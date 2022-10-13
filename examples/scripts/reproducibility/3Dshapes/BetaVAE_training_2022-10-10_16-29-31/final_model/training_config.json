@@ -1,0 +1,1 @@
+{"name": "BaseTrainerConfig", "output_dir": "reproducibility/3Dshapes", "batch_size": 32, "num_epochs": 150, "learning_rate": 0.0001, "steps_saving": null, "steps_predict": null, "keep_best_on_train": false, "seed": 8, "no_cuda": false}

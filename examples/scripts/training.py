@@ -2,10 +2,10 @@ import argparse
 import importlib
 import logging
 import os
-
+import h5py
 import numpy as np
 import torch
-
+from sklearn.utils import shuffle
 from pythae.data.preprocessors import DataProcessor
 from pythae.models import RHVAE
 from pythae.models.rhvae import RHVAEConfig
@@ -22,7 +22,6 @@ logger.addHandler(console)
 logger.setLevel(logging.INFO)
 
 PATH = os.path.dirname(os.path.abspath(__file__))
-
 ap = argparse.ArgumentParser()
 
 # Training setting
@@ -30,7 +29,7 @@ ap.add_argument(
     "--dataset",
     type=str,
     default="mnist",
-    choices=["mnist", "cifar10", "celeba"],
+    choices=["mnist", "cifar10", "celeba","dsprites", "3Dshapes"],
     help="The data set to use to perform training. It must be located in the folder 'data' at the "
     "path 'data/datset_name/' and contain a 'train_data.npz' and a 'eval_data.npz' file with the "
     "data being under the key 'data'. The data must be in the range [0-255] and shaped with the "
@@ -164,19 +163,48 @@ def main(args):
             from pythae.models.nn.benchmarks.celeba import Encoder_ResNet_VQVAE_CELEBA as Encoder_VQVAE
             from pythae.models.nn.benchmarks.celeba import Decoder_ResNet_AE_CELEBA as Decoder_AE
             from pythae.models.nn.benchmarks.celeba import Decoder_ResNet_VQVAE_CELEBA as Decoder_VQVAE
+            
+    if args.dataset == "3Dshapes": 
+
+        #from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
+        #from pythae.models.nn.benchmarks.shapes import Decoder_Conv_VAE_3DSHAPES as Decoder_VAE
+        from pythae.models.nn.benchmarks.shapes import Equivariant_Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
+        from pythae.models.nn.benchmarks.shapes import Equivariant_SBD_Conv_VAE_3DSHAPES as Decoder_VAE
+        #from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
+        dataset = h5py.File('/home/cristianmeo/Datasets/3dshapes.h5', 'r')
+        
+        data =  shuffle(np.array(dataset['images']).transpose((0, 3, 1, 2))/ 255.0)
+    
+        train_data = data[:int(data.shape[0]*0.8)]
+        eval_data = data[int(data.shape[0]*0.8):]
+
+    if args.dataset == "dsprites":
+
+        from pythae.models.nn.benchmarks.dsprites import Encoder_Conv_VAE_DSPRITES as Encoder_VAE
+        from pythae.models.nn.benchmarks.dsprites import Decoder_Conv_VAE_DSPRITES as Decoder_VAE
+        dataset = h5py.File('/home/cristianmeo/Datasets/dsprites-dataset/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.hdf5', 'r')
+        image_data =  np.expand_dims(np.array(dataset['imgs']), 1) / 255.0
+
+        train_data = image_data[:int(image_data.shape[0]*0.8)]
+        eval_data = image_data[int(image_data.shape[0]*0.8):]
+
 
     try:
         logger.info(f"\nLoading {args.dataset} data...\n")
-        train_data = (
-            np.load(os.path.join(PATH, f"data/{args.dataset}", "train_data.npz"))[
-                "data"
-            ]
-            / 255.0
-        )
-        eval_data = (
-            np.load(os.path.join(PATH, f"data/{args.dataset}", "eval_data.npz"))["data"]
-            / 255.0
-        )
+        if args.dataset != "dsprites" and args.dataset != "3Dshapes":
+            train_data = (
+                np.load(os.path.join(PATH, f"data/{args.dataset}", "train_data.npz"))[
+                    "data"
+                ]
+                / 255.0
+            )
+        print("train_data shape: ",train_data.shape )
+        if args.dataset != "dsprites" and args.dataset != "3Dshapes":
+            eval_data = (
+                np.load(os.path.join(PATH, f"data/{args.dataset}", "eval_data.npz"))["data"]
+                / 255.0
+            )
+        print("eval_data shape: ",eval_data.shape )
     except Exception as e:
         raise FileNotFoundError(
             f"Unable to load the data from 'data/{args.dataset}' folder. Please check that both a "
@@ -337,7 +365,7 @@ def main(args):
 
     elif args.model_name == "beta_vae":
         from pythae.models import BetaVAE, BetaVAEConfig
-
+        print(args.model_config)
         if args.model_config is not None:
             model_config = BetaVAEConfig.from_json_file(args.model_config)
 
@@ -349,7 +377,7 @@ def main(args):
         model = BetaVAE(
             model_config=model_config,
             encoder=Encoder_VAE(model_config),
-            decoder=Decoder_AE(model_config),
+            decoder=Decoder_VAE(model_config),
         )
 
     elif args.model_name == "hvae":
@@ -486,7 +514,7 @@ def main(args):
         model = DisentangledBetaVAE(
             model_config=model_config,
             encoder=Encoder_VAE(model_config),
-            decoder=Decoder_AE(model_config),
+            decoder=Decoder_VAE(model_config),
         )
 
     elif args.model_name == "factor_vae":
@@ -503,7 +531,7 @@ def main(args):
         model = FactorVAE(
             model_config=model_config,
             encoder=Encoder_VAE(model_config),
-            decoder=Decoder_AE(model_config),
+            decoder=Decoder_VAE(model_config),
         )
 
     elif args.model_name == "beta_tc_vae":
@@ -520,7 +548,7 @@ def main(args):
         model = BetaTCVAE(
             model_config=model_config,
             encoder=Encoder_VAE(model_config),
-            decoder=Decoder_AE(model_config),
+            decoder=Decoder_VAE(model_config),
         )
 
     elif args.model_name == "vae_iaf":

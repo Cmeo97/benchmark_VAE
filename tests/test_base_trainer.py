@@ -281,7 +281,7 @@ class Test_Device_Checks:
             model=ae, train_dataset=train_dataset, training_config=training_config
         )
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = "cuda:6" if torch.cuda.is_available() else "cpu"
 
         if training_config.no_cuda:
             assert next(trainer.model.parameters()).device == "cpu"

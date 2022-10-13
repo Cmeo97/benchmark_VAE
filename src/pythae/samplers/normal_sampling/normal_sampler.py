@@ -3,6 +3,10 @@ import torch
 from ...models import BaseAE
 from ..base import BaseSampler
 from .normal_config import NormalSamplerConfig
+import os 
+import numpy as np
+import torchvision
+import matplotlib.pyplot as plt
 
 
 class NormalSampler(BaseSampler):
@@ -50,8 +54,16 @@ class NormalSampler(BaseSampler):
 
         x_gen_list = []
 
+
+
+        device = (
+            "cuda:0"
+            if torch.cuda.is_available() 
+            else "cpu"
+        )
+
         for i in range(full_batch_nbr):
-            z = torch.randn(batch_size, self.model.latent_dim).to(self.device)
+            z = torch.randn(batch_size, self.model.latent_dim).to(device)
             x_gen = self.model.decoder(z)["reconstruction"].detach()
 
             if output_dir is not None:
@@ -63,9 +75,10 @@ class NormalSampler(BaseSampler):
             x_gen_list.append(x_gen)
 
         if last_batch_samples_nbr > 0:
-            z = torch.randn(last_batch_samples_nbr, self.model.latent_dim).to(
-                self.device
+            z = torch.randn(batch_size, self.model.latent_dim).to(
+                device
             )
+            
             x_gen = self.model.decoder(z)["reconstruction"].detach()
 
             if output_dir is not None:
@@ -76,10 +89,25 @@ class NormalSampler(BaseSampler):
                         "%08d.png" % int(batch_size * full_batch_nbr + j),
                     )
 
-            x_gen_list.append(x_gen)
+        images = []
+        delta = np.linspace(-0.5, 1.5, 10)
+        for l in range(10):
+            for i in range(10):
+                for j in range(10):
+                    z[l, i] = z[l, i] + delta[j]
+                    x_gen = self.model.decoder(z[l].unsqueeze(0))["reconstruction"].detach()
+                    images.append(x_gen[0])
+                    z[l, i] = z[l, i] - delta[j]
+            print('traversals')
+            np_imagegrid = torchvision.utils.make_grid(images, 10, 10).detach().cpu().numpy()
+            plt.imsave('traversals_'+str(l)+'.png', np.transpose(np_imagegrid, (1, 2, 0)))
+            images = []
+        x_gen_list.append(x_gen)
 
         if save_sampler_config:
             self.save(output_dir)
 
         if return_gen:
             return torch.cat(x_gen_list, dim=0)
+
+

@@ -2,8 +2,8 @@ import datetime
 import logging
 import os
 from copy import deepcopy
-from typing import Any, Dict, List, Optional
-
+from typing import Any, Dict, List, Optional, Callable, Tuple, Union
+import numpy as np
 import torch
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -20,6 +20,7 @@ from ..training_callbacks import (
     TrainingCallback,
 )
 from .base_training_config import BaseTrainerConfig
+from torch.optim.lr_scheduler import LambdaLR
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +84,10 @@ class BaseTrainer:
 
         set_seed(self.training_config.seed)
 
+        self.get_freer_gpu()
+
         device = (
-            "cuda"
+            "cuda:"+str(self.freer_device)
             if torch.cuda.is_available() and not training_config.no_cuda
             else "cpu"
         )
@@ -149,6 +152,11 @@ class BaseTrainer:
             shuffle=True,
         )
 
+    def get_freer_gpu(self):
+        os.system('nvidia-smi -q -d Memory |grep -A4 GPU|grep Used >tmp')
+        memory_available = [int(x.split()[2]) for x in open('tmp', 'r').readlines()]
+        self.freer_device = np.argmin(memory_available)
+
     def get_eval_dataloader(
         self, eval_dataset: BaseDataset
     ) -> torch.utils.data.DataLoader:
@@ -170,11 +178,41 @@ class BaseTrainer:
         self, model: BaseAE, optimizer: torch.optim.Optimizer
     ) -> torch.optim.lr_scheduler:
 
+        #scheduler = LambdaLR(
+        #    optimizer,
+        #    lr_lambda=self.linear_warmup_exp_decay(
+        #        10, 0.5, 100
+        #    ),
+        #)
+
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, factor=0.5, patience=10, verbose=True
         )
 
         return scheduler
+
+    def linear_warmup_exp_decay(self,
+        warmup_steps: Optional[int] = None,
+        exp_decay_rate: Optional[float] = None,
+        exp_decay_steps: Optional[int] = None,
+    ) -> Callable[[int], float]:
+        assert (exp_decay_steps is None) == (exp_decay_rate is None)
+        use_exp_decay = exp_decay_rate is not None
+        if warmup_steps is not None:
+            assert warmup_steps > 0
+
+        def lr_lambda(step):
+           
+            multiplier = 1.0
+            if warmup_steps is not None and step < warmup_steps:
+                multiplier *= step / warmup_steps
+            if use_exp_decay:
+                multiplier *= exp_decay_rate ** (step / exp_decay_steps)
+           
+            return multiplier
+      
+        return lr_lambda
+
 
     def _run_model_sanity_check(self, model, loader):
         try:
@@ -213,12 +251,12 @@ class BaseTrainer:
 
         inputs_on_device = inputs
 
-        if self.device == "cuda":
+        if self.device == "cuda:"+str(self.freer_device):
             cuda_inputs = dict.fromkeys(inputs)
 
             for key in inputs.keys():
                 if torch.is_tensor(inputs[key]):
-                    cuda_inputs[key] = inputs[key].cuda()
+                    cuda_inputs[key] = inputs[key].to(self.device)
 
                 else:
                     cuda_inputs = inputs[key]

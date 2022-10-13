@@ -59,13 +59,14 @@ class BetaVAE(VAE):
         """
 
         x = inputs["data"]
-
+        #print(x.shape)
         encoder_output = self.encoder(x)
 
         mu, log_var = encoder_output.embedding, encoder_output.log_covariance
 
         std = torch.exp(0.5 * log_var)
-        z, eps = self._sample_gauss(mu, std)
+        z = mu + std * torch.randn_like(std)
+        #print(z.shape)
         recon_x = self.decoder(z)["reconstruction"]
 
         loss, recon_loss, kld = self.loss_function(recon_x, x, mu, log_var, z)
@@ -105,9 +106,3 @@ class BetaVAE(VAE):
             recon_loss.mean(dim=0),
             KLD.mean(dim=0),
         )
-
-    def _sample_gauss(self, mu, std):
-        # Reparametrization trick
-        # Sample N(0, I)
-        eps = torch.randn_like(std)
-        return mu + eps * std, eps
