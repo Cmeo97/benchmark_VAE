@@ -268,16 +268,16 @@ class WandbCallback(TrainingCallback):  # pragma: no cover
 
             self._wandb = wandb
 
-    def setup(self, training_config, **kwargs):
+    def setup(self, training_config, name_exp, **kwargs):
         self.is_initialized = True
 
         model_config = kwargs.pop("model_config", None)
-        project_name = kwargs.pop("project_name", "pythae_benchmarking_vae")
-        entity_name = kwargs.pop("entity_name", None)
+        #project_name = kwargs.pop("project_name", "pythae_benchmarking_vae")
+        #entity_name = kwargs.pop("entity_name", None)
 
         training_config_dict = training_config.to_dict()
 
-        self.run = self._wandb.init(project=project_name, entity=entity_name)
+        self.run = self._wandb.init(project="Disentanglement-VAE", entity="cmeo", name=name_exp)
 
         if model_config is not None:
             model_config_dict = model_config.to_dict()

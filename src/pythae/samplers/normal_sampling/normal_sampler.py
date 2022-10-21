@@ -19,12 +19,14 @@ class NormalSampler(BaseSampler):
 
     """
 
-    def __init__(self, model: BaseAE, sampler_config: NormalSamplerConfig = None):
+    def __init__(self, model: BaseAE, sampler_config: NormalSamplerConfig = None, device = None):
 
         if sampler_config is None:
             sampler_config = NormalSamplerConfig()
 
         BaseSampler.__init__(self, model=model, sampler_config=sampler_config)
+
+        self.device = device
 
     def sample(
         self,
@@ -54,29 +56,21 @@ class NormalSampler(BaseSampler):
 
         x_gen_list = []
 
-
-
-        device = (
-            "cuda:0"
-            if torch.cuda.is_available() 
-            else "cpu"
-        )
-
         for i in range(full_batch_nbr):
-            z = torch.randn(batch_size, self.model.latent_dim).to(device)
+            z = torch.randn(batch_size, self.model.latent_dim).to(self.device)
             x_gen = self.model.decoder(z)["reconstruction"].detach()
 
             if output_dir is not None:
                 for j in range(batch_size):
                     self.save_img(
-                        x_gen[j], output_dir, "%08d.png" % int(batch_size * i + j)
+                        x_gen[j], output_dir+'/generated_images', "%08d.png" % int(batch_size * i + j)
                     )
 
             x_gen_list.append(x_gen)
 
         if last_batch_samples_nbr > 0:
             z = torch.randn(batch_size, self.model.latent_dim).to(
-                device
+                self.device
             )
             
             x_gen = self.model.decoder(z)["reconstruction"].detach()
@@ -85,7 +79,7 @@ class NormalSampler(BaseSampler):
                 for j in range(last_batch_samples_nbr):
                     self.save_img(
                         x_gen[j],
-                        output_dir,
+                        output_dir+'/generated_images',
                         "%08d.png" % int(batch_size * full_batch_nbr + j),
                     )
 
@@ -100,7 +94,7 @@ class NormalSampler(BaseSampler):
                     z[l, i] = z[l, i] - delta[j]
             print('traversals')
             np_imagegrid = torchvision.utils.make_grid(images, 10, 10).detach().cpu().numpy()
-            plt.imsave('traversals_'+str(l)+'.png', np.transpose(np_imagegrid, (1, 2, 0)))
+            plt.imsave(output_dir+'/traversals/'+'traversals_'+str(l)+'.png', np.transpose(np_imagegrid, (1, 2, 0)))
             images = []
         x_gen_list.append(x_gen)
 

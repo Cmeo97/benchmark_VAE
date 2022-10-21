@@ -106,3 +106,15 @@ class BetaVAE(VAE):
             recon_loss.mean(dim=0),
             KLD.mean(dim=0),
         )
+
+    
+    def update(self):
+        print('updating architecture')
+        with torch.no_grad():
+            self.encoder.weights_embedding = torch.nn.Parameter(self.encoder.weights_embedding[:, :9])
+            self.encoder.weights_log_var = torch.nn.Parameter(self.encoder.weights_log_var[:, :9])
+            self.encoder.bias_embedding = torch.nn.Parameter(self.encoder.bias_embedding[:, :9])
+            self.encoder.bias_log_var = torch.nn.Parameter(self.encoder.bias_log_var[:, :9])
+            self.decoder.layers[0][0].weight = torch.nn.Parameter(self.decoder.layers[0][0].weight.data[:, :9])
+            self.decoder.layers[0][0].in_channels = 9
+

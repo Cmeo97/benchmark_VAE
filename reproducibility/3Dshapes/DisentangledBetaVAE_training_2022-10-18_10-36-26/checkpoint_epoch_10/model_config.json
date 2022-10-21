@@ -1,0 +1,1 @@
+{"name": "DisentangledBetaVAEConfig", "input_dim": [3, 64, 64], "latent_dim": 10, "uses_default_encoder": false, "uses_default_decoder": false, "reconstruction_loss": "mse", "beta": 1.0, "C": 50.0, "warmup_epoch": 25}

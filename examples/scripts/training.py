@@ -62,6 +62,7 @@ ap.add_argument(
         "vae_nf",
         "vae_iaf",
         "vae_lin_nf",
+        "tc_vae",
     ],
     required=True,
 )
@@ -86,6 +87,23 @@ ap.add_argument(
     help="whether to log the metrics in wandb",
     action="store_true",
 )
+ap.add_argument(
+    "--seed",
+    help='seed',
+    type=int,
+    default=0,
+    choices=[0,1,2,3,4,5],
+)
+
+ap.add_argument(
+    "--update_architecture",
+    help='architecture dynamic update',
+    type=bool,
+    default=False,
+    choices=[True, False],
+)
+
+
 ap.add_argument(
     "--wandb_project",
     help="wandb project name",
@@ -166,11 +184,11 @@ def main(args):
             
     if args.dataset == "3Dshapes": 
 
-        #from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
+        from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
         #from pythae.models.nn.benchmarks.shapes import Decoder_Conv_VAE_3DSHAPES as Decoder_VAE
-        from pythae.models.nn.benchmarks.shapes import Equivariant_Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
-        from pythae.models.nn.benchmarks.shapes import Equivariant_SBD_Conv_VAE_3DSHAPES as Decoder_VAE
-        #from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
+        #from pythae.models.nn.benchmarks.shapes import Equivariant_Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
+        #from pythae.models.nn.benchmarks.shapes import Equivariant_SBD_Conv_VAE_3DSHAPES as Decoder_VAE
+        from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
         dataset = h5py.File('/home/cristianmeo/Datasets/3dshapes.h5', 'r')
         
         data =  shuffle(np.array(dataset['images']).transpose((0, 3, 1, 2))/ 255.0)
@@ -181,7 +199,7 @@ def main(args):
     if args.dataset == "dsprites":
 
         from pythae.models.nn.benchmarks.dsprites import Encoder_Conv_VAE_DSPRITES as Encoder_VAE
-        from pythae.models.nn.benchmarks.dsprites import Decoder_Conv_VAE_DSPRITES as Decoder_VAE
+        from pythae.models.nn.benchmarks.dsprites import SBD_Conv_VAE_DSPRITES as Decoder_VAE
         dataset = h5py.File('/home/cristianmeo/Datasets/dsprites-dataset/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.hdf5', 'r')
         image_data =  np.expand_dims(np.array(dataset['imgs']), 1) / 255.0
 
@@ -240,8 +258,8 @@ def main(args):
 
         model = AE(
             model_config=model_config,
-            encoder=Encoder_AE(model_config),
-            decoder=Decoder_AE(model_config),
+            encoder=Encoder_VAE(model_config),
+            decoder=Decoder_VAE(model_config),
         )
 
     elif args.model_name == "vae":
@@ -517,6 +535,23 @@ def main(args):
             decoder=Decoder_VAE(model_config),
         )
 
+    elif args.model_name == "tc_vae":
+        from pythae.models import TCVAE, TCVAEConfig
+
+        if args.model_config is not None:
+            model_config = TCVAEConfig.from_json_file(args.model_config)
+
+        else:
+            model_config = TCVAEConfig()
+
+        model_config.input_dim = data_input_dim
+
+        model = TCVAE(
+            model_config=model_config,
+            encoder=Encoder_VAE(model_config),
+            decoder=Decoder_VAE(model_config),
+        )
+
     elif args.model_name == "factor_vae":
         from pythae.models import FactorVAE, FactorVAEConfig
 
@@ -636,19 +671,20 @@ def main(args):
     callbacks = []
 
     if args.use_wandb:
+        name_exp = args.model_name+'-'+args.dataset+'-'+str(args.seed)
+        print(name_exp)
         from pythae.trainers.training_callbacks import WandbCallback
 
         wandb_cb = WandbCallback()
         wandb_cb.setup(
             training_config,
             model_config=model_config,
-            project_name=args.wandb_project,
-            entity_name=args.wandb_entity,
+            name_exp=name_exp
         )
 
         callbacks.append(wandb_cb)
 
-    pipeline = TrainingPipeline(training_config=training_config, model=model)
+    pipeline = TrainingPipeline(training_config=training_config, model=model, update_architecture=args.update_architecture)
 
     pipeline(train_data=train_data, eval_data=eval_data, callbacks=callbacks)
 

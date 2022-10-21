@@ -16,3 +16,4 @@ class BetaVAEConfig(VAEConfig):
     """
 
     beta: float = 1.0
+    encoder_dsprites: bool = False
