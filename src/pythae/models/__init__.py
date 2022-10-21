@@ -20,6 +20,7 @@ from .auto_model import AutoModel
 from .base import BaseAE, BaseAEConfig
 from .beta_tc_vae import BetaTCVAE, BetaTCVAEConfig
 from .beta_vae import BetaVAE, BetaVAEConfig
+from .tc_vae import TCVAE, TCVAEConfig
 from .ciwae import CIWAE, CIWAEConfig
 from .disentangled_beta_vae import DisentangledBetaVAE, DisentangledBetaVAEConfig
 from .factor_vae import FactorVAE, FactorVAEConfig
@@ -96,4 +97,6 @@ __all__ = [
     "MIWAEConfig",
     "PIWAE",
     "PIWAEConfig",
+    "TCVAE",
+    "TCVAEConfig"
 ]

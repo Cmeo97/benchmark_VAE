@@ -1,23 +1,23 @@
 import os
 from typing import Optional
-
+import numpy as np
 import torch
 import torch.nn.functional as F
-
+from torch import Tensor
 from ...data.datasets import BaseDataset
 from ..base.base_utils import ModelOutput
 from ..nn import BaseDecoder, BaseEncoder
 from ..vae import VAE
-from .beta_vae_config import BetaVAEConfig
+from .tc_vae_config import TCVAEConfig
 
 
-class BetaVAE(VAE):
+class TCVAE(VAE):
     r"""
-    :math:`\beta`-VAE model.
+    Disentangled :math:`\beta`-VAE model.
 
     Args:
-        model_config (BetaVAEConfig): The Variational Autoencoder configuration setting the main
-            parameters of the model.
+        model_config (DisentangledBetaVAEConfig): The Variational Autoencoder configuration setting
+            the main parameters of the model.
 
         encoder (BaseEncoder): An instance of BaseEncoder (inheriting from `torch.nn.Module` which
             plays the role of encoder. This argument allows you to use your own neural networks
@@ -36,15 +36,22 @@ class BetaVAE(VAE):
 
     def __init__(
         self,
-        model_config: BetaVAEConfig,
+        model_config: TCVAEConfig,
         encoder: Optional[BaseEncoder] = None,
         decoder: Optional[BaseDecoder] = None,
     ):
 
         VAE.__init__(self, model_config=model_config, encoder=encoder, decoder=decoder)
 
-        self.model_name = "BetaVAE"
+        assert (
+            model_config.warmup_epoch >= 0
+        ), f"Provide a value of warmup epoch >= 0, got {model_config.warmup_epoch}"
+
+        self.model_name = "DisentangledBetaVAE"
         self.beta = model_config.beta
+        self.C = model_config.C
+        self.warmup_epoch = model_config.warmup_epoch
+        self.alpha = model_config.alpha
 
     def forward(self, inputs: BaseDataset, **kwargs):
         """
@@ -59,21 +66,29 @@ class BetaVAE(VAE):
         """
 
         x = inputs["data"]
-        #print(x.shape)
+
+        epoch = kwargs.pop("epoch", self.warmup_epoch)
+
         encoder_output = self.encoder(x)
 
         mu, log_var = encoder_output.embedding, encoder_output.log_covariance
 
         std = torch.exp(0.5 * log_var)
-        z = mu + std * torch.randn_like(std)
-        #print(z.shape)
+        z, eps = self._sample_gauss(mu, std)
+
+        mu_p = (mu/(std+1e-12)).sum(dim=1)/(1/(std+1e-12)).sum(dim=1)
+
+        std_p = (1/(std+1e-12)).sum(dim=1)
+
+        #z = self.E_attention(mu, log_var)
         recon_x = self.decoder(z)["reconstruction"]
 
-        loss, recon_loss, kld = self.loss_function(recon_x, x, mu, log_var, z)
+        loss, recon_loss, kld, cvib = self.loss_function(recon_x, x, mu, log_var, std, mu_p.unsqueeze(1), std_p.unsqueeze(1), epoch)
 
         output = ModelOutput(
             reconstruction_loss=recon_loss,
             reg_loss=kld,
+            cvib_loss=cvib,
             loss=loss,
             recon_x=recon_x,
             z=z,
@@ -81,7 +96,7 @@ class BetaVAE(VAE):
 
         return output
 
-    def loss_function(self, recon_x, x, mu, log_var, z):
+    def loss_function(self, recon_x, x, mu, log_var, std, mu_p, std_p, epoch):
 
         if self.model_config.reconstruction_loss == "mse":
 
@@ -98,23 +113,40 @@ class BetaVAE(VAE):
                 x.reshape(x.shape[0], -1),
                 reduction="none",
             ).sum(dim=-1)
-
+  
+        KLD_f = -0.5 * self.alpha *  torch.sum(1 + torch.log(torch.abs(std_p/(std+1e-12))) - (mu_p - mu).pow(2)/(std+1e-12) - std_p/(std+1e-12), dim=1)/mu.shape[1]
         KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp(), dim=-1)
+        C_factor = min(epoch / (self.warmup_epoch + 1), 1)
+        KLD_diff = (1 - self.alpha) * torch.abs(KLD - self.C * C_factor)
+
 
         return (
-            (recon_loss + self.beta * KLD).mean(dim=0),
+            ((mu.shape[1] - self.alpha)/mu.shape[1] * recon_loss + self.beta * KLD_diff + KLD_f).mean(dim=0),
             recon_loss.mean(dim=0),
             KLD.mean(dim=0),
+            KLD_f.mean(dim=0)
         )
 
-    
-    def update(self):
+    def _sample_gauss(self, mu, std):
+        # Reparametrization trick
+        # Sample N(0, I)
+        eps = torch.randn_like(std)
+        return mu + eps * std, eps
+
+    def update(self, idx_to_remove):
+        n = self.encoder.weights_embedding.shape[0]
+        idxs_ = np.arange(n)
+        idxs = np.delete(idxs_, idx_to_remove)
         print('updating architecture')
         with torch.no_grad():
-            self.encoder.weights_embedding = torch.nn.Parameter(self.encoder.weights_embedding[:, :9])
-            self.encoder.weights_log_var = torch.nn.Parameter(self.encoder.weights_log_var[:, :9])
-            self.encoder.bias_embedding = torch.nn.Parameter(self.encoder.bias_embedding[:, :9])
-            self.encoder.bias_log_var = torch.nn.Parameter(self.encoder.bias_log_var[:, :9])
-            self.decoder.layers[0][0].weight = torch.nn.Parameter(self.decoder.layers[0][0].weight.data[:, :9])
-            self.decoder.layers[0][0].in_channels = 9
+            self.encoder.weights_embedding = torch.nn.Parameter(self.encoder.weights_embedding[idxs, :])
+            self.encoder.weights_log_var = torch.nn.Parameter(self.encoder.weights_log_var[idxs, :])
+            self.encoder.bias_embedding = torch.nn.Parameter(self.encoder.bias_embedding[idxs])
+            self.encoder.bias_log_var = torch.nn.Parameter(self.encoder.bias_log_var[idxs])
+            self.decoder.layers[0][0].weight = torch.nn.Parameter(self.decoder.layers[0][0].weight.data[:, idxs])
+            self.decoder.layers[0][0].in_channels = n - 1
+            self.decoder.pos_embedding.channels_map.weight = torch.nn.Parameter(self.decoder.pos_embedding.channels_map.weight.data[idxs])
+            self.decoder.pos_embedding.channels_map.bias = torch.nn.Parameter(self.decoder.pos_embedding.channels_map.bias.data[idxs])
+            self.decoder.pos_embedding.channels_map.out_channels = n - 1
 
+  

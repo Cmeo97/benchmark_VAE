@@ -8,7 +8,7 @@ import torch
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
-
+from pythae.pipelines.metrics import EvaluationPipeline
 from ...customexception import ModelError
 from ...data.datasets import BaseDataset
 from ...models import BaseAE
@@ -65,6 +65,7 @@ class BaseTrainer:
         optimizer: Optional[torch.optim.Optimizer] = None,
         scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None,
         callbacks: List[TrainingCallback] = None,
+        update_architecture: bool = False,
     ):
 
         if training_config is None:
@@ -86,12 +87,14 @@ class BaseTrainer:
 
         self.get_freer_gpu()
 
+        self.update_architecture = update_architecture
+
         device = (
             "cuda:"+str(self.freer_device)
             if torch.cuda.is_available() and not training_config.no_cuda
             else "cpu"
         )
-
+        self.device = device
         # place model on device
         model = model.to(device)
         model.device = device
@@ -271,6 +274,9 @@ class BaseTrainer:
         loss.backward()
         self.optimizer.step()
 
+       
+        
+
     def _schedulers_step(self, metrics=None):
         if isinstance(self.scheduler, ReduceLROnPlateau):
             self.scheduler.step(metrics)
@@ -367,8 +373,16 @@ class BaseTrainer:
 
             metrics = {}
 
-            epoch_train_loss = self.train_step(epoch)
+            epoch_train_loss, logs = self.train_step(epoch)
             metrics["train_epoch_loss"] = epoch_train_loss
+            metrics["train_mse"] = logs['mse']
+            metrics["train_kl"] = logs['kl']
+            metrics["train_cvib"] = logs['cvib']
+
+            if len(logs.keys()) > 3:
+                for i in range(len(logs.keys()) - 3): 
+                    metric_name = 'train_SEPIN_'+str(i)
+                    metrics[metric_name] = logs[metric_name]
 
             if self.eval_dataset is not None:
                 epoch_eval_loss = self.eval_step(epoch)
@@ -417,7 +431,7 @@ class BaseTrainer:
                 and epoch % self.training_config.steps_saving == 0
             ):
                 self.save_checkpoint(
-                    model=best_model, dir_path=training_dir, epoch=epoch
+                    model=self._best_model, dir_path=training_dir, epoch=epoch
                 )
                 logger.info(f"Saved checkpoint at epoch {epoch}\n")
 
@@ -430,7 +444,7 @@ class BaseTrainer:
 
         final_dir = os.path.join(training_dir, "final_model")
 
-        self.save_model(best_model, dir_path=final_dir)
+        self.save_model(self._best_model, dir_path=final_dir)
         logger.info("Training ended!")
         logger.info(f"Saved final model in {final_dir}")
 
@@ -504,6 +518,9 @@ class BaseTrainer:
         self.model.train()
 
         epoch_loss = 0
+        mse = 0
+        kl = 0
+        cvib = 0.00
 
         for inputs in self.train_loader:
 
@@ -518,6 +535,9 @@ class BaseTrainer:
             loss = model_output.loss
 
             epoch_loss += loss.item()
+            mse += model_output.reconstruction_loss.item()
+            kl += model_output.reg_loss.item()
+            cvib += model_output.cvib_loss.item()
 
             if epoch_loss != epoch_loss:
                 raise ArithmeticError("NaN detected in train loss")
@@ -527,11 +547,37 @@ class BaseTrainer:
             )
 
         # Allows model updates if needed
-        self.model.update()
+        logs = {}
+        if epoch % self.training_config.steps_saving == 0:
+
+            evaluation_pipeline = EvaluationPipeline(
+            model=self.model, device=self.device,
+            eval_loader=self.eval_loader
+            )    
+            print('Disentanglement Metrics at epoch: ', epoch)
+            disentanglement_metrics, normalized_SEPIN = evaluation_pipeline.disentanglement_metrics()
+           
+            idx_min_SEPIN = np.argmin(normalized_SEPIN)
+            min_SEPIN = normalized_SEPIN[idx_min_SEPIN]
+
+            for i in range(normalized_SEPIN.shape[0]):
+                name_metric='train_SEPIN_'+str(i)
+                logs[name_metric] = normalized_SEPIN[i]
+
+            if min_SEPIN < 1e-5 and self.update_architecture:
+                self.model.update(idx_min_SEPIN)
+                self._best_model = deepcopy(self.model)
 
         epoch_loss /= len(self.train_loader)
+        mse /= len(self.train_loader)
+        kl /= len(self.train_loader)
+        cvib /= len(self.train_loader)
 
-        return epoch_loss
+        logs['mse'] = mse
+        logs['kl'] = kl
+        logs['cvib'] = cvib
+
+        return epoch_loss, logs
 
     def save_model(self, model: BaseAE, dir_path: str):
         """This method saves the final model along with the config files

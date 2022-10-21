@@ -5,7 +5,7 @@ import os
 import h5py
 import numpy as np
 import torch
-from sklearn.utils import shuffle
+#from pythae.samplers import NormalSampler
 from pythae.data.preprocessors import DataProcessor
 from pythae.models import RHVAE
 from pythae.models.rhvae import RHVAEConfig
@@ -15,13 +15,17 @@ from pythae.trainers import (
     CoupledOptimizerTrainerConfig,
     AdversarialTrainerConfig,
 )
+from pythae.models import AutoModel
+from pythae.samplers import MAFSamplerConfig
+from pythae.pipelines.metrics import EvaluationPipeline
+import matplotlib.pyplot as plt
 
 logger = logging.getLogger(__name__)
 console = logging.StreamHandler()
 logger.addHandler(console)
 logger.setLevel(logging.INFO)
-
 PATH = os.path.dirname(os.path.abspath(__file__))
+
 ap = argparse.ArgumentParser()
 
 # Training setting
@@ -62,7 +66,6 @@ ap.add_argument(
         "vae_nf",
         "vae_iaf",
         "vae_lin_nf",
-        "tc_vae",
     ],
     required=True,
 )
@@ -71,6 +74,14 @@ ap.add_argument(
     help="path to model config file (expected json file)",
     default=None,
 )
+
+ap.add_argument(
+    "--exp_name", 
+    type=str,
+    help='name experiment',
+    default='None',
+)
+
 ap.add_argument(
     "--nn",
     help="neural nets to use",
@@ -88,23 +99,6 @@ ap.add_argument(
     action="store_true",
 )
 ap.add_argument(
-    "--seed",
-    help='seed',
-    type=int,
-    default=0,
-    choices=[0,1,2,3,4,5],
-)
-
-ap.add_argument(
-    "--update_architecture",
-    help='architecture dynamic update',
-    type=bool,
-    default=False,
-    choices=[True, False],
-)
-
-
-ap.add_argument(
     "--wandb_project",
     help="wandb project name",
     default="test-project",
@@ -115,11 +109,13 @@ ap.add_argument(
     default="benchmark_team",
 )
 
+
+
 args = ap.parse_args()
 
 
 def main(args):
-
+    
     if args.dataset == "mnist":
 
         if args.nn == "convnet":
@@ -189,17 +185,18 @@ def main(args):
         #from pythae.models.nn.benchmarks.shapes import Equivariant_Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
         #from pythae.models.nn.benchmarks.shapes import Equivariant_SBD_Conv_VAE_3DSHAPES as Decoder_VAE
         from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
+
         dataset = h5py.File('/home/cristianmeo/Datasets/3dshapes.h5', 'r')
         
-        data =  shuffle(np.array(dataset['images']).transpose((0, 3, 1, 2))/ 255.0)
-    
-        train_data = data[:int(data.shape[0]*0.8)]
-        eval_data = data[int(data.shape[0]*0.8):]
+        data =  np.array(dataset['images']).transpose((0, 3, 1, 2))/ 255.0
+        
+        train_data = data[:int(data.shape[0]*0.9)]
+        eval_data = data[int(data.shape[0]*0.9):]
 
     if args.dataset == "dsprites":
 
         from pythae.models.nn.benchmarks.dsprites import Encoder_Conv_VAE_DSPRITES as Encoder_VAE
-        from pythae.models.nn.benchmarks.dsprites import SBD_Conv_VAE_DSPRITES as Decoder_VAE
+        from pythae.models.nn.benchmarks.dsprites import Decoder_Conv_VAE_DSPRITES as Decoder_VAE
         dataset = h5py.File('/home/cristianmeo/Datasets/dsprites-dataset/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.hdf5', 'r')
         image_data =  np.expand_dims(np.array(dataset['imgs']), 1) / 255.0
 
@@ -535,23 +532,6 @@ def main(args):
             decoder=Decoder_VAE(model_config),
         )
 
-    elif args.model_name == "tc_vae":
-        from pythae.models import TCVAE, TCVAEConfig
-
-        if args.model_config is not None:
-            model_config = TCVAEConfig.from_json_file(args.model_config)
-
-        else:
-            model_config = TCVAEConfig()
-
-        model_config.input_dim = data_input_dim
-
-        model = TCVAE(
-            model_config=model_config,
-            encoder=Encoder_VAE(model_config),
-            decoder=Decoder_VAE(model_config),
-        )
-
     elif args.model_name == "factor_vae":
         from pythae.models import FactorVAE, FactorVAEConfig
 
@@ -671,22 +651,123 @@ def main(args):
     callbacks = []
 
     if args.use_wandb:
-        name_exp = args.model_name+'-'+args.dataset+'-'+str(args.seed)
-        print(name_exp)
         from pythae.trainers.training_callbacks import WandbCallback
 
         wandb_cb = WandbCallback()
         wandb_cb.setup(
             training_config,
             model_config=model_config,
-            name_exp=name_exp
+            project_name=args.wandb_project,
+            entity_name=args.wandb_entity,
         )
 
         callbacks.append(wandb_cb)
 
-    pipeline = TrainingPipeline(training_config=training_config, model=model, update_architecture=args.update_architecture)
+    #pipeline = TrainingPipeline(training_config=training_config, model=model)
 
-    pipeline(train_data=train_data, eval_data=eval_data, callbacks=callbacks)
+    #pipeline(train_data=train_data, eval_data=eval_data, callbacks=callbacks)
+
+    metrics = []
+    # Retrieve the trained model
+    for i in [30, 40, 50, 60]:
+        my_trained_vae = AutoModel.load_from_folder(
+        '/home/cristianmeo/benchmark_VAE/examples/scripts/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+'/checkpoint_epoch_'+str(i)
+        )
+        #my_sampler_config = MAFSamplerConfig(
+        #n_made_blocks=2,
+        #n_hidden_in_made=3,
+        #hidden_size=64
+        #)
+        ## Build the pipeline
+        #pipe = GenerationPipeline(
+        #model=my_trained_vae,
+        #sampler_config=my_sampler_config
+        #)
+        ## Launch data generation
+        #generted_samples = pipe(
+        #num_samples=10,
+        #return_gen=True, # If false returns nothing
+        #train_data=train_data, # Needed to fit the sampler
+        #eval_data=eval_data, # Needed to fit the sampler
+        #training_config=BaseTrainerConfig(num_epochs=200) # TrainingConfig to use to fit the sampler
+        #)
+
+        # Define your sampler
+        
+        os.system('nvidia-smi -q -d Memory |grep -A4 GPU|grep Used >tmp')
+        memory_available = [int(x.split()[2]) for x in open('tmp', 'r').readlines()]
+        freer_device = np.argmin(memory_available)
+
+        device = (
+            "cuda:"+str(freer_device)
+            if torch.cuda.is_available() and not training_config.no_cuda
+            else "cpu"
+        )
+
+        evaluation_pipeline = EvaluationPipeline(
+        model=my_trained_vae,
+        eval_loader=eval_data,
+        device=device
+        )    
+
+        disentanglement_metrics = evaluation_pipeline.disentanglement_metrics()
+        metrics.append(disentanglement_metrics)
+
+
+        # Generate samples
+        gen_data = evaluation_pipeline.sample(
+        num_samples=50,
+        batch_size=10,
+        output_dir='/home/cristianmeo/benchmark_VAE/examples/scripts/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+"/checkpoint_epoch_"+str(i),
+        return_gen=True
+        )
+
+    my_trained_vae = AutoModel.load_from_folder(
+        '/home/cristianmeo/benchmark_VAE/examples/scripts/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+'/final_model'
+    )
+        #my_sampler_config = MAFSamplerConfig(
+        #n_made_blocks=2,
+        #n_hidden_in_made=3,
+        #hidden_size=64
+        #)
+        ## Build the pipeline
+        #pipe = GenerationPipeline(
+        #model=my_trained_vae,
+        #sampler_config=my_sampler_config
+        #)
+        ## Launch data generation
+        #generted_samples = pipe(
+        #num_samples=10,
+        #return_gen=True, # If false returns nothing
+        #train_data=train_data, # Needed to fit the sampler
+        #eval_data=eval_data, # Needed to fit the sampler
+        #training_config=BaseTrainerConfig(num_epochs=200) # TrainingConfig to use to fit the sampler
+        #)
+
+        # Define your sampler
+
+
+    evaluation_pipeline = EvaluationPipeline(
+    model=my_trained_vae,
+    eval_loader=eval_data,
+    device=device
+    )    
+    
+    disentanglement_metrics, normalized_SEPIN = evaluation_pipeline.disentanglement_metrics()
+    metrics.append(disentanglement_metrics)
+    metrics.append(normalized_SEPIN)
+
+
+    # Generate samples
+    gen_data = evaluation_pipeline.sample(
+    num_samples=50,
+    batch_size=10,
+    output_dir='/home/cristianmeo/benchmark_VAE/examples/scripts/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+"/final_model",
+    return_gen=True
+    )
+    print(metrics)
+
+    
 
 
 if __name__ == "__main__":

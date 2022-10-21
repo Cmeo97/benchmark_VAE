@@ -297,12 +297,12 @@ class Equivariant_Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
             )
         )
 
-        layers.append(
-            nn.Sequential(
-                nn.Linear(in_features=256, out_features=16),
-                nn.ReLU(),
-            )
-        )
+        #layers.append(
+        #    nn.Sequential(
+        #        nn.Linear(in_features=256, out_features=16),
+        #        nn.ReLU(),
+        #    )
+        #)
 
 
         self.layers = layers
@@ -310,7 +310,11 @@ class Equivariant_Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
 
         #self.embedding = nn.Linear(256, args.latent_dim)
         #self.log_var = nn.Linear(256, args.latent_dim)
-        self.inputattention = InputAttentionModule(args.latent_dim, 16, 2)
+        self.weights_embedding = torch.nn.Parameter(torch.randn(self.latent_dim, 256))
+        self.weights_log_var = torch.nn.Parameter(torch.randn(self.latent_dim, 256))
+        self.bias_embedding = torch.nn.Parameter(torch.randn(self.latent_dim))
+        self.bias_log_var = torch.nn.Parameter(torch.randn(self.latent_dim))
+        #self.inputattention = InputAttentionModule(args.latent_dim, 16, 2)
         self.init_weights()
     
     def init_weights(self):
@@ -318,6 +322,10 @@ class Equivariant_Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
             if isinstance(self.layers[i][0], nn.Conv2d) or isinstance(self.layers[i][0], nn.Linear):
                 self.layers[i][0].weight.data.normal_(0, 0.01)
                 nn.init.constant_(self.layers[i][0].bias.data, 0)
+        self.weights_log_var.data.normal_(0, 0.01)
+        self.weights_embedding.data.normal_(0, 0.01)
+        nn.init.constant_(self.bias_embedding.data, 0)
+        nn.init.constant_(self.bias_log_var.data, 0)
         #self.embedding.weight.data.normal_(0, 0.01)
         #nn.init.constant_(self.embedding.bias.data, 0)
         #self.log_var.weight.data.normal_(0, 0.01)
@@ -361,6 +369,7 @@ class Equivariant_Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
 
         for i in range(max_depth):
             out = self.layers[i](out)
+        
             #print(out.shape)
 
             if output_layer_levels is not None:
@@ -368,13 +377,17 @@ class Equivariant_Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
                     output[f"embedding_layer_{i+1}"] = out
 
             if i + 1 == self.depth:
-                h = self.inputattention(out.unsqueeze(1))
-                output["embedding"] = h[:, : , 0]
-                output["log_covariance"] = h[: , :, 1]
+                output["embedding"] = F.linear(out, self.weights_embedding, self.bias_embedding)
+                output["log_covariance"] = F.linear(out, self.weights_log_var, self.bias_log_var)
+                #h = self.inputattention(out.unsqueeze(1))
+                #output["embedding"] = h[:, : , 0]
+                #output["log_covariance"] = h[: , :, 1]
                 #print(h.shape)
             
 
         return output
+
+        #self.layers[5][0].weight = torch.nn.Parameter(self.layers[5][0].weight.data[2:8])
 
 
 
@@ -782,8 +795,8 @@ class InputAttentionModule(nn.Module):
         self.eps = eps
         self.scale = dim**-0.5
         self.iters = iters
-        self.latent_mu = nn.Parameter(torch.rand(1, 1, dim))
-        self.latent_log_sigma = nn.Parameter(torch.randn(1, 1, dim))
+        self.latent_mu = nn.Parameter(torch.rand(1, 10, dim))
+        self.latent_log_sigma = nn.Parameter(torch.randn(1, 10, dim))
         with torch.no_grad():
             limit = sqrt(6.0 / (1 + dim))
             torch.nn.init.uniform_(self.latent_mu, -limit, limit)
@@ -792,8 +805,7 @@ class InputAttentionModule(nn.Module):
         self.to_k = nn.Linear(input_dim, dim, bias=False)
         self.to_v = nn.Linear(input_dim, dim, bias=False)
 
-        hidden_dim = 8
-        hidden_dim = max(dim, hidden_dim)
+        hidden_dim = max(dim, latent_dim)
 
         self.mlp = nn.Sequential(
             nn.Linear(dim, hidden_dim),
@@ -840,57 +852,53 @@ class LatentAttentionModule(nn.Module):
        
         super().__init__()
         self.latent_dim = latent_dim
-        dim = 1
+        #dim = 1
         self.eps = eps
-        self.scale = dim**-0.5
-        self.iters = iters
-        self.latent_mu = nn.Parameter(torch.rand(1, 1, dim))
-        self.latent_log_sigma = nn.Parameter(torch.randn(1, 1, dim))
-        with torch.no_grad():
-            limit = sqrt(6.0 / (1 + dim))
-            torch.nn.init.uniform_(self.latent_mu, -limit, limit)
-            torch.nn.init.uniform_(self.latent_log_sigma, -limit, limit)
-        self.to_q = nn.Linear(dim, dim, bias=False)
-        self.to_k = nn.Linear(dim, dim, bias=False)
-        self.to_v = nn.Linear(dim, dim, bias=False)
+        self.scale = latent_dim**-0.5
+        #self.iters = iters
+        #self.latent_mu = nn.Parameter(torch.rand(1, 10, dim))
+        #self.latent_log_sigma = nn.Parameter(torch.randn(1, 10, dim))
+        #with torch.no_grad():
+        #    limit = sqrt(6.0 / (1 + dim))
+        #    torch.nn.init.uniform_(self.latent_mu, -limit, limit)
+        #    torch.nn.init.uniform_(self.latent_log_sigma, -limit, limit)
+        #self.to_q = nn.Linear(dim, dim, bias=False)
+        #self.to_k = nn.Linear(dim, dim, bias=False)
+        #self.to_v = nn.Linear(dim, dim, bias=False)
 
-        hidden_dim = 8
-        hidden_dim = max(dim, hidden_dim)
+        #hidden_dim = 8
+        #hidden_dim = max(dim, hidden_dim)
 
-        self.mlp = nn.Sequential(
-            nn.Linear(dim, hidden_dim),
-            nn.ReLU(inplace=True),
-            nn.Linear(hidden_dim, dim),
-        )
-        self.gru = nn.GRUCell(dim, dim)
+        #self.mlp = nn.Sequential(
+        #    nn.Linear(dim, hidden_dim),
+        #    nn.ReLU(inplace=True),
+        #    nn.Linear(hidden_dim, dim),
+        #)
+        #self.gru = nn.GRUCell(dim, dim)
 
-        self.norm_input = nn.LayerNorm(dim, eps=0.001)
-        self.norm_latent = nn.LayerNorm(dim, eps=0.001)
-        self.norm_pre_ff = nn.LayerNorm(dim, eps=0.001)
-        self.dim = dim
+        #self.norm_input = nn.LayerNorm(dim, eps=0.001)
+        #self.norm_latent = nn.LayerNorm(dim, eps=0.001)
+        #self.norm_pre_ff = nn.LayerNorm(dim, eps=0.001)
+        #self.dim = dim
 
-    def forward(self, inputs: Tensor) -> Tensor:
-        b, n, _ = inputs.shape
-        latent_dim = self.latent_dim
-
-        mu = self.latent_mu.expand(b, latent_dim, 1)
-        sigma = self.latent_log_sigma.expand(b, latent_dim, 1).exp()
-        latent = torch.normal(mu, sigma)
-
-        k, v = self.to_k(inputs), self.to_v(inputs)
-        for _ in range(self.iters):
-            latent_prev = latent
-            latent = self.norm_latent(latent)
-            q = self.to_q(latent)
-            dots = torch.einsum("bid,bjd->bij", q, k) * self.scale
-            attn = dots.softmax(dim=1) + self.eps
-            #attn = attn / attn.sum(dim=-1, keepdim=True)
-            updates = torch.einsum("bjd,bij->bid", v, attn)
-            latent = self.gru(
-                updates.reshape(-1, self.dim), latent_prev.reshape(-1, self.dim)
-            )
-            latent = latent.reshape(b, -1, self.dim)
-            latent = latent + self.mlp(self.norm_pre_ff(latent))
+    def forward(self, latent_mu: Tensor, latent_log_var: Tensor, eps=1e-8, latent_dim=10) -> Tensor:
+        b, n = latent_mu.shape
+        
+        mu = latent_mu.unsqueeze(1).expand(b, latent_dim, n) # [b, latent_dim, current dim ]
+        std =torch.exp(0.5* latent_log_var.unsqueeze(1).expand(b,  latent_dim, n))  #[b, latent_dim, current dim]
+        #latent = torch.normal(mu, sigma)   # reparametrization -> [b, latent_dim]
+      
+        z = mu + std * torch.randn_like(std) # #[b, latent_dim, current dim]
+  
+        dots = torch.einsum("bid,bjd->bij", latent_mu.unsqueeze(2), z) * latent_mu.shape[1]**-0.5
+        attn = dots.softmax(dim=1) + eps
+        attn = attn / attn.sum(dim=-1, keepdim=True)
+        latent = torch.einsum("bjd,bij->bid", latent_mu.unsqueeze(2), attn)
+        #latent = self.gru(
+        #    updates.reshape(-1, self.dim), latent_prev.reshape(-1, self.dim)
+        #)
+        #latent = latent.reshape(b, -1, self.dim)
+        #latent = latent + self.mlp(self.norm_pre_ff(latent))
 
         return latent
 
