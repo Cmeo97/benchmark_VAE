@@ -180,9 +180,9 @@ def main(args):
             
     if args.dataset == "3Dshapes": 
 
-        from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
+        #from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
         #from pythae.models.nn.benchmarks.shapes import Decoder_Conv_VAE_3DSHAPES as Decoder_VAE
-        #from pythae.models.nn.benchmarks.shapes import Equivariant_Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
+        from pythae.models.nn.benchmarks.shapes import Equivariant_Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
         #from pythae.models.nn.benchmarks.shapes import Equivariant_SBD_Conv_VAE_3DSHAPES as Decoder_VAE
         from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
 
@@ -196,7 +196,7 @@ def main(args):
     if args.dataset == "dsprites":
 
         from pythae.models.nn.benchmarks.dsprites import Encoder_Conv_VAE_DSPRITES as Encoder_VAE
-        from pythae.models.nn.benchmarks.dsprites import Decoder_Conv_VAE_DSPRITES as Decoder_VAE
+        from pythae.models.nn.benchmarks.dsprites import SBD_Conv_VAE_DSPRITES as Decoder_VAE
         dataset = h5py.File('/home/cristianmeo/Datasets/dsprites-dataset/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.hdf5', 'r')
         image_data =  np.expand_dims(np.array(dataset['imgs']), 1) / 255.0
 
@@ -667,63 +667,62 @@ def main(args):
 
     #pipeline(train_data=train_data, eval_data=eval_data, callbacks=callbacks)
 
-    metrics = []
-    # Retrieve the trained model
-    for i in [30, 40, 50, 60]:
-        my_trained_vae = AutoModel.load_from_folder(
-        '/home/cristianmeo/benchmark_VAE/examples/scripts/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+'/checkpoint_epoch_'+str(i)
-        )
-        #my_sampler_config = MAFSamplerConfig(
-        #n_made_blocks=2,
-        #n_hidden_in_made=3,
-        #hidden_size=64
-        #)
-        ## Build the pipeline
-        #pipe = GenerationPipeline(
-        #model=my_trained_vae,
-        #sampler_config=my_sampler_config
-        #)
-        ## Launch data generation
-        #generted_samples = pipe(
-        #num_samples=10,
-        #return_gen=True, # If false returns nothing
-        #train_data=train_data, # Needed to fit the sampler
-        #eval_data=eval_data, # Needed to fit the sampler
-        #training_config=BaseTrainerConfig(num_epochs=200) # TrainingConfig to use to fit the sampler
-        #)
-
-        # Define your sampler
-        
-        os.system('nvidia-smi -q -d Memory |grep -A4 GPU|grep Used >tmp')
-        memory_available = [int(x.split()[2]) for x in open('tmp', 'r').readlines()]
-        freer_device = np.argmin(memory_available)
-
-        device = (
-            "cuda:"+str(freer_device)
-            if torch.cuda.is_available() and not training_config.no_cuda
-            else "cpu"
-        )
-
-        evaluation_pipeline = EvaluationPipeline(
-        model=my_trained_vae,
-        eval_loader=eval_data,
-        device=device
-        )    
-
-        disentanglement_metrics = evaluation_pipeline.disentanglement_metrics()
-        metrics.append(disentanglement_metrics)
-
-
-        # Generate samples
-        gen_data = evaluation_pipeline.sample(
-        num_samples=50,
-        batch_size=10,
-        output_dir='/home/cristianmeo/benchmark_VAE/examples/scripts/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+"/checkpoint_epoch_"+str(i),
-        return_gen=True
-        )
-
+    #metrics = []
+    ## Retrieve the trained model
+    #for i in [2, 4, 6, 8, 10, 12]:
+    #    my_trained_vae = AutoModel.load_from_folder(
+    #    '/home/cristianmeo/benchmark_VAE/examples/scripts/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+'/checkpoint_epoch_'+str(i)
+    #    )
+    #    #my_sampler_config = MAFSamplerConfig(
+    #    #n_made_blocks=2,
+    #    #n_hidden_in_made=3,
+    #    #hidden_size=64
+    #    #)
+    #    ## Build the pipeline
+    #    #pipe = GenerationPipeline(
+    #    #model=my_trained_vae,
+    #    #sampler_config=my_sampler_config
+    #    #)
+    #    ## Launch data generation
+    #    #generted_samples = pipe(
+    #    #num_samples=10,
+    #    #return_gen=True, # If false returns nothing
+    #    #train_data=train_data, # Needed to fit the sampler
+    #    #eval_data=eval_data, # Needed to fit the sampler
+    #    #training_config=BaseTrainerConfig(num_epochs=200) # TrainingConfig to use to fit the sampler
+    #    #)
+#
+    #    # Define your sampler
+    #    
+    os.system('nvidia-smi -q -d Memory |grep -A4 GPU|grep Used >tmp')
+    memory_available = [int(x.split()[2]) for x in open('tmp', 'r').readlines()]
+    freer_device = np.argmin(memory_available)
+    device = (
+        "cuda:"+str(freer_device)
+        if torch.cuda.is_available() and not training_config.no_cuda
+        else "cpu"
+    )
+#
+    #    evaluation_pipeline = EvaluationPipeline(
+    #    model=my_trained_vae,
+    #    eval_loader=eval_data,
+    #    device=device
+    #    )    
+#
+    #    disentanglement_metrics = evaluation_pipeline.disentanglement_metrics()
+    #    metrics.append(disentanglement_metrics)
+#
+#
+    #    # Generate samples
+    #    gen_data = evaluation_pipeline.sample(
+    #    num_samples=50,
+    #    batch_size=10,
+    #    output_dir='/home/cristianmeo/benchmark_VAE/examples/scripts/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+"/checkpoint_epoch_"+str(i),
+    #    return_gen=True
+    #    )
+    exp_name = 'DisentangledBetaVAE_training_2022-10-19_16-39-02'
     my_trained_vae = AutoModel.load_from_folder(
-        '/home/cristianmeo/benchmark_VAE/examples/scripts/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+'/final_model'
+        '/home/cristianmeo/benchmark_VAE/examples/scripts/reproducibility/'+str(args.dataset)+'/'+str(exp_name)+'/final_model'
     )
         #my_sampler_config = MAFSamplerConfig(
         #n_made_blocks=2,
@@ -754,18 +753,18 @@ def main(args):
     )    
     
     disentanglement_metrics, normalized_SEPIN = evaluation_pipeline.disentanglement_metrics()
-    metrics.append(disentanglement_metrics)
-    metrics.append(normalized_SEPIN)
+    #metrics.append(disentanglement_metrics)
+    #metrics.append(normalized_SEPIN)
 
-
+    
     # Generate samples
     gen_data = evaluation_pipeline.sample(
     num_samples=50,
     batch_size=10,
-    output_dir='/home/cristianmeo/benchmark_VAE/examples/scripts/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+"/final_model",
+    output_dir='/home/cristianmeo/benchmark_VAE/examples/scripts/reproducibility/'+str(args.dataset)+'/'+str(exp_name)+"/final_model",
     return_gen=True
     )
-    print(metrics)
+    #print(metrics)
 
     
 

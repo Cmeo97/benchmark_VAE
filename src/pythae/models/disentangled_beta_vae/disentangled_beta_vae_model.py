@@ -74,12 +74,17 @@ class DisentangledBetaVAE(VAE):
 
         std = torch.exp(0.5 * log_var)
         z, eps = self._sample_gauss(mu, std)
+        if 'mask_idx' in kwargs.keys():
+            self.store_parameters()
+            self.apply_parameters_mask(kwargs['mask_idx'])    
 
         #z = self.E_attention(mu, log_var)
         recon_x = self.decoder(z)["reconstruction"]
 
         loss, recon_loss, kld = self.loss_function(recon_x, x, mu, log_var, z, epoch)
-
+        if 'mask_idx' in kwargs.keys():
+            self.restore_parameters()
+        
         output = ModelOutput(
             reconstruction_loss=recon_loss,
             reg_loss=kld,
@@ -140,6 +145,49 @@ class DisentangledBetaVAE(VAE):
             self.decoder.pos_embedding.channels_map.weight = torch.nn.Parameter(self.decoder.pos_embedding.channels_map.weight.data[idxs])
             self.decoder.pos_embedding.channels_map.bias = torch.nn.Parameter(self.decoder.pos_embedding.channels_map.bias.data[idxs])
             self.decoder.pos_embedding.channels_map.out_channels = n - 1
+
+    def apply_parameters_mask(self, mask_idx):
+        
+        self.encoder.weights_embedding.data[mask_idx]                 = self.encoder.weights_embedding.data[mask_idx]                 * 0
+        self.encoder.weights_log_var.data[mask_idx]                   = self.encoder.weights_log_var.data[mask_idx]                   * 0
+        self.encoder.bias_embedding.data[mask_idx]                    = self.encoder.bias_embedding.data[mask_idx]                    * 0
+        self.encoder.bias_log_var.data[mask_idx]                      = self.encoder.bias_log_var.data[mask_idx]                      * 0
+        self.decoder.layers[0][0].weight.data[:, mask_idx]            = self.decoder.layers[0][0].weight.data[:, mask_idx]            * 0
+        self.decoder.pos_embedding.channels_map.weight.data[mask_idx] = self.decoder.pos_embedding.channels_map.weight.data[mask_idx] * 0
+        self.decoder.pos_embedding.channels_map.bias.data[mask_idx]   = self.decoder.pos_embedding.channels_map.bias.data[mask_idx]   * 0
+
+        with torch.no_grad():
+            self.encoder.weights_embedding = torch.nn.Parameter(self.encoder.weights_embedding.data)
+            self.encoder.weights_log_var = torch.nn.Parameter(self.encoder.weights_log_var.data)
+            self.encoder.bias_embedding = torch.nn.Parameter(self.encoder.bias_embedding.data)
+            self.encoder.bias_log_var = torch.nn.Parameter(self.encoder.bias_log_var.data)
+            self.decoder.layers[0][0].weight = torch.nn.Parameter(self.decoder.layers[0][0].weight.data)
+            self.decoder.pos_embedding.channels_map.weight = torch.nn.Parameter(self.decoder.pos_embedding.channels_map.weight.data)
+            self.decoder.pos_embedding.channels_map.bias = torch.nn.Parameter(self.decoder.pos_embedding.channels_map.bias.data)
+
+
+    def store_parameters(self):
+       self.stored_weights_embedding  =  self.encoder.weights_embedding 
+       self.stored_weights_log_var =  self.encoder.weights_log_var
+       self.stored_bias_embedding  =  self.encoder.bias_embedding 
+       self.stored_bias_log_var  =  self.encoder.bias_log_var 
+       self.stored_layers_weight  =  self.decoder.layers[0][0].weight 
+       self.stored_layers_in_channels  =  self.decoder.layers[0][0].in_channels 
+       self.stored_pos_embedding_channels_map_weight =  self.decoder.pos_embedding.channels_map.weight
+       self.stored_pos_embedding_channels_map_bias =  self.decoder.pos_embedding.channels_map.bias
+       self.stored_pos_embedding_channels_map_out_channels  =  self.decoder.pos_embedding.channels_map.out_channels 
+
+    def restore_parameters(self):
+       self.encoder.weights_embedding = self.stored_weights_embedding                            
+       self.encoder.weights_log_var = self.stored_weights_log_var                              
+       self.encoder.bias_embedding = self.stored_bias_embedding                               
+       self.encoder.bias_log_var = self.stored_bias_log_var                                 
+       self.decoder.layers[0][0].weight = self.stored_layers_weight                                
+       self.decoder.layers[0][0].in_channels = self.stored_layers_in_channels                           
+       self.decoder.pos_embedding.channels_map.weight = self.stored_pos_embedding_channels_map_weight            
+       self.decoder.pos_embedding.channels_map.bias = self.stored_pos_embedding_channels_map_bias              
+       self.decoder.pos_embedding.channels_map.out_channels = self.stored_pos_embedding_channels_map_out_channels      
+
 
     def E_attention(self, latent_mu: Tensor, latent_log_var: Tensor, eps=1e-8, latent_dim=10) -> Tensor:
         b, n = latent_mu.shape

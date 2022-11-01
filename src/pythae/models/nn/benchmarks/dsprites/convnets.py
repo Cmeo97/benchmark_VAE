@@ -36,21 +36,21 @@ class Encoder_Conv_VAE_DSPRITES(BaseEncoder):
 
         layers.append(
             nn.Sequential(
-                nn.Conv2d(in_channels=self.n_channels,  out_channels=64, kernel_size=4, stride=2, padding=1),
+                nn.Conv2d(in_channels=self.n_channels,  out_channels=32, kernel_size=4, stride=2, padding=1),
                 nn.ReLU(),
             )
         )
 
         layers.append(
             nn.Sequential(
-                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=4, stride=2, padding=1),
+                nn.Conv2d(in_channels=32, out_channels=32, kernel_size=4, stride=2, padding=1),
                 nn.ReLU()
             )
         )
 
         layers.append(
             nn.Sequential(
-                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=4, stride=2, padding=1),
+                nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2, padding=1),
                 nn.ReLU()
             )
         )
@@ -187,11 +187,9 @@ class SBD_Conv_VAE_DSPRITES(BaseDecoder):
             )
         )
 
-
         layers.append(
             nn.Sequential(
-                nn.Conv2d(in_channels=64, out_channels=self.n_channels,  kernel_size=3, stride=1, padding=1),
-                nn.Sigmoid()
+                nn.Conv2d(in_channels=64, out_channels=self.n_channels, kernel_size=3, stride=1, padding=1)
             )
         )
 
@@ -264,6 +262,128 @@ class SBD_Conv_VAE_DSPRITES(BaseDecoder):
 
 
 
+class Decoder_Conv_VAE_DSPRITES(BaseDecoder):
+    """
+    A Convolutional decoder suited for DSPRITES and Autoencoder-based
+    models. """
+
+
+    def __init__(self, args: dict):
+        BaseDecoder.__init__(self)
+        self.input_dim = (1, 64, 64)
+        self.latent_dim = args.latent_dim
+        self.n_channels = 1
+
+        layers = nn.ModuleList()
+        self.relu = nn.ReLU()
+        #layers.append(nn.Linear(args.latent_dim, 128),nn.ReLU())
+        layers.append(
+            nn.Sequential(
+                nn.Linear(128, 4 * 4 * 64),
+                nn.ReLU(),
+                )
+        )
+
+
+        layers.append(
+            nn.Sequential(
+                nn.ConvTranspose2d(64, 64, 4, 2, padding=1),
+                nn.ReLU(),
+            )
+        )
+
+
+        layers.append(
+            nn.Sequential(
+                nn.ConvTranspose2d(64, 32, 4, 2, padding=1),
+                nn.ReLU(),
+            )
+        )
+
+        layers.append(
+            nn.Sequential(
+                nn.ConvTranspose2d(32, 32, 4, 2, padding=1),
+                nn.ReLU(),
+            )
+        )
+
+        layers.append(
+            nn.Sequential(
+                nn.ConvTranspose2d(32, self.n_channels, 4, 2, padding=1)
+            )
+        )
+
+        self.weights_dec_1 = torch.nn.Parameter(torch.randn(128, self.latent_dim))
+        self.bias_dec_1 = torch.nn.Parameter(torch.randn(128))
+
+        self.layers = layers
+        self.depth = len(layers)
+        self.init_weights()
+
+    def init_weights(self):
+        for i in range(self.depth):
+            if isinstance(self.layers[i][0], nn.Conv2d) or isinstance(self.layers[i][0], nn.Linear):
+                self.layers[i][0].weight.data.normal_(0, 0.01)
+                nn.init.constant_(self.layers[i][0].bias.data, 0)
+        self.weights_dec_1.data.normal_(0, 0.01)
+        nn.init.constant_(self.bias_dec_1.data, 0)
+       
+
+    def forward(self, z: torch.Tensor, output_layer_levels: List[int] = None):
+        """Forward method
+
+        Args:
+            output_layer_levels (List[int]): The levels of the layers where the outputs are
+                extracted. If None, the last layer's output is returned. Default: None.
+
+        Returns:
+            ModelOutput: An instance of ModelOutput containing the reconstruction of the latent code
+            under the key `reconstruction`. Optional: The outputs of the layers specified in
+            `output_layer_levels` arguments are available under the keys `reconstruction_layer_i`
+            where i is the layer's level.
+        """
+        output = ModelOutput()
+
+        max_depth = self.depth
+
+        if output_layer_levels is not None:
+
+            assert all(
+                self.depth >= levels > 0 or levels == -1
+                for levels in output_layer_levels
+            ), (
+                f"Cannot output layer deeper than depth ({self.depth})."
+                f"Got ({output_layer_levels})"
+            )
+
+            if -1 in output_layer_levels:
+                max_depth = self.depth
+            else:
+                max_depth = max(output_layer_levels)
+
+        out = z
+        #print('decoder shapes')
+
+        out = self.relu(F.linear(out, self.weights_dec_1, self.bias_dec_1))
+
+        for i in range(max_depth):
+            out = self.layers[i](out)
+            #print(out.shape)
+
+            if i == 0:
+                out = out.reshape(z.shape[0], 64, 4, 4)
+                #print(out.shape)
+
+            if output_layer_levels is not None:
+                if i + 1 in output_layer_levels:
+                    output[f"reconstruction_layer_{i+1}"] = out
+
+            if i + 1 == self.depth:
+                output["reconstruction"] = out
+
+        return output
+
+
 
 class PositionalEmbedding(nn.Module):
     def __init__(self, height: int, width: int, channels: int):
@@ -288,8 +408,6 @@ class PositionalEmbedding(nn.Module):
         )
         x = x + self.channels_map(bs_linear_position_embedding)
         return x
-
-
 
 
 

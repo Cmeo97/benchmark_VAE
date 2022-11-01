@@ -4,13 +4,36 @@
 ProjectName="Disentanlement_benchmark"
 
 
-declare -a All_Datasets=(3Dshapes dsprites) #"ClutteredCompoundGoalTileCoordinationHeterogeneityEnv"
+#declare -a All_Datasets=(dsprites) #"ClutteredCompoundGoalTileCoordinationHeterogeneityEnv"
+#
+#declare -a All_Methods=(disentangled_beta_vae)
+#
+#declare -a All_seeds=(1 2 3)
+#
+#declare -a All_architecture_updates=(True)
+#
+#for Dataset in "${All_Datasets[@]}"
+#do
+#	for Method in "${All_Methods[@]}"
+#	do
+#		for arc_update in "${All_architecture_updates[@]}"
+#		do	
+#			for seed in "${All_seeds[@]}"
+#			do
+#                bash train.sh $Dataset $Method $arc_update $seed &
+#            done
+#		done
+#	done
+#done
 
-declare -a All_Methods=(disentangled_beta_vae tc_vae)
 
-declare -a All_seeds=(1 2 3 4 5)
+declare -a All_Datasets=(3Dshapes) #"ClutteredCompoundGoalTileCoordinationHeterogeneityEnv"
 
-declare -a All_architecture_updates=(False True)
+declare -a All_Methods=(tc_vae)
+
+declare -a All_seeds=(1 2 3)
+
+declare -a All_architecture_updates=(False)
 
 for Dataset in "${All_Datasets[@]}"
 do
@@ -25,6 +48,29 @@ do
 		done
 	done
 done
+
+
+#declare -a All_Datasets=(dsprites) #"ClutteredCompoundGoalTileCoordinationHeterogeneityEnv"
+#
+#declare -a All_Methods=(disentangled_beta_vae)
+#
+#declare -a All_seeds=(1 2 3 4 5)
+#
+#declare -a All_latent_dim=(7)
+#
+#for Dataset in "${All_Datasets[@]}"
+#do
+#	for Method in "${All_Methods[@]}"
+#	do
+#		for latent_dim in "${All_latent_dim[@]}"
+#		do	
+#			for seed in "${All_seeds[@]}"
+#			do
+#                bash train_no_update.sh $Dataset $Method $latent_dim $seed &
+#            done
+#		done
+#	done
+#done
 #declare -a All_Methods=("saf")
 #declare -a All_use_policy_pool=(False True)
 #declare -a All_latent_kl=(False True)

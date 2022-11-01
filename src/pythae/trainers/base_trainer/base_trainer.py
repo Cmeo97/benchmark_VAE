@@ -66,6 +66,7 @@ class BaseTrainer:
         scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None,
         callbacks: List[TrainingCallback] = None,
         update_architecture: bool = False,
+        name_exp: str = None,
     ):
 
         if training_config is None:
@@ -82,6 +83,7 @@ class BaseTrainer:
             )
 
         self.training_config = training_config
+        self.name_exp = name_exp
 
         set_seed(self.training_config.seed)
 
@@ -306,9 +308,10 @@ class BaseTrainer:
 
         training_dir = os.path.join(
             self.training_config.output_dir,
-            f"{self.model.model_name}_training_{self._training_signature}",
+            #f"{self.model.model_name}_training_{self._training_signature}",
+            self.name_exp
         )
-
+        #training_dir = self.name_exp
         self.training_dir = training_dir
 
         if not os.path.exists(training_dir):
@@ -375,9 +378,9 @@ class BaseTrainer:
 
             epoch_train_loss, logs = self.train_step(epoch)
             metrics["train_epoch_loss"] = epoch_train_loss
-            metrics["train_mse"] = logs['mse']
-            metrics["train_kl"] = logs['kl']
-            metrics["train_cvib"] = logs['cvib']
+            metrics["train_mse"] = logs['train_mse']
+            metrics["train_kl"] = logs['train_kl']
+            metrics["train_cvib"] = logs['train_cvib']
 
             if len(logs.keys()) > 3:
                 for i in range(len(logs.keys()) - 3): 
@@ -385,8 +388,11 @@ class BaseTrainer:
                     metrics[metric_name] = logs[metric_name]
 
             if self.eval_dataset is not None:
-                epoch_eval_loss = self.eval_step(epoch)
+                epoch_eval_loss, logs = self.eval_step(epoch)
                 metrics["eval_epoch_loss"] = epoch_eval_loss
+                metrics["eval_mse"] = logs['eval_mse']
+                metrics["eval_kl"] = logs['eval_kl']
+                metrics["eval_cvib"] = logs['eval_cvib']
                 self._schedulers_step(epoch_eval_loss)
 
             else:
@@ -469,7 +475,11 @@ class BaseTrainer:
         self.model.eval()
 
         epoch_loss = 0
+        mse = 0
+        kl = 0
+        cvib = 0
 
+        logs = {}
         for inputs in self.eval_loader:
 
             inputs = self._set_inputs_to_device(inputs)
@@ -489,6 +499,9 @@ class BaseTrainer:
             loss = model_output.loss
 
             epoch_loss += loss.item()
+            mse += model_output.reconstruction_loss.item()
+            kl += model_output.reg_loss.item()
+            cvib += model_output.cvib_loss.item()
 
             if epoch_loss != epoch_loss:
                 raise ArithmeticError("NaN detected in eval loss")
@@ -496,8 +509,15 @@ class BaseTrainer:
             self.callback_handler.on_eval_step_end(training_config=self.training_config)
 
         epoch_loss /= len(self.eval_loader)
+        mse /= len(self.eval_loader)
+        kl /= len(self.eval_loader)
+        cvib /= len(self.eval_loader)
 
-        return epoch_loss
+        logs['eval_mse'] = mse
+        logs['eval_kl'] = kl
+        logs['eval_cvib'] = cvib
+
+        return epoch_loss, logs
 
     def train_step(self, epoch: int):
         """The trainer performs training loop over the train_loader.
@@ -520,7 +540,7 @@ class BaseTrainer:
         epoch_loss = 0
         mse = 0
         kl = 0
-        cvib = 0.00
+        cvib = 0
 
         for inputs in self.train_loader:
 
@@ -565,17 +585,30 @@ class BaseTrainer:
                 logs[name_metric] = normalized_SEPIN[i]
 
             if min_SEPIN < 1e-5 and self.update_architecture:
-                self.model.update(idx_min_SEPIN)
-                self._best_model = deepcopy(self.model)
+                perturbations = []
+                idxs = np.where(normalized_SEPIN<1e-5)
+                for idx in idxs[0]:
+                   model_output_ = self.model(
+                   inputs, epoch=epoch, dataset_size=len(self.train_loader.dataset), mask_idx=idx
+                   )
+                   perturbations.append(torch.abs(loss - model_output_.loss))
+                pb = torch.stack(perturbations).detach().cpu().numpy()
+                if np.min(pb) < 5:
+                    min_pb_idx = np.argmin(pb)
+                    update_idx = idxs[0][min_pb_idx]
+                    self.model.update(update_idx)
+                    self._best_model = deepcopy(self.model)
+                else:
+                    print('architecture could not be updated, minimum perturbation applied =', np.min(pb))
 
         epoch_loss /= len(self.train_loader)
         mse /= len(self.train_loader)
         kl /= len(self.train_loader)
         cvib /= len(self.train_loader)
 
-        logs['mse'] = mse
-        logs['kl'] = kl
-        logs['cvib'] = cvib
+        logs['train_mse'] = mse
+        logs['train_kl'] = kl
+        logs['train_cvib'] = cvib
 
         return epoch_loss, logs
 

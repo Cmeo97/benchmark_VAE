@@ -5,7 +5,7 @@ model_name=$2
 seed=$4
 update_architecture=$3
 
-ExpName=${model_name}"_"${dataset}"_"${seed}
+ExpName=${model_name}"_"${dataset}"_"${seed}"_"${update_architecture}
 echo "doing experiment: ${ExpName}"
 
 nohup python examples/scripts/training.py \

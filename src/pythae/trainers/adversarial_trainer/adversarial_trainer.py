@@ -14,6 +14,8 @@ from ...models import BaseAE
 from ..base_trainer import BaseTrainer
 from ..training_callbacks import TrainingCallback
 from .adversarial_trainer_config import AdversarialTrainerConfig
+from pythae.pipelines.metrics import EvaluationPipeline
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,8 @@ class AdversarialTrainer(BaseTrainer):
         autoencoder_scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None,
         discriminator_scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None,
         callbacks: List[TrainingCallback] = None,
+        update_architecture: bool = None,
+        name_exp: str = None
     ):
 
         BaseTrainer.__init__(
@@ -66,6 +70,8 @@ class AdversarialTrainer(BaseTrainer):
             training_config=training_config,
             optimizer=None,
             callbacks=callbacks,
+            update_architecture=update_architecture,
+            name_exp=name_exp
         )
 
         # set autoencoder optimizer
@@ -102,6 +108,7 @@ class AdversarialTrainer(BaseTrainer):
         self.discriminator_scheduler = discriminator_scheduler
 
         self.optimizer = None
+
 
     def set_default_autoencoder_optimizer(self, model: BaseAE) -> torch.optim.Optimizer:
 
@@ -174,7 +181,8 @@ class AdversarialTrainer(BaseTrainer):
 
         training_dir = os.path.join(
             self.training_config.output_dir,
-            f"{self.model.model_name}_training_{self._training_signature}",
+            #f"{self.model.model_name}_training_{self._training_signature}",
+            self.name_exp
         )
 
         self.training_dir = training_dir
@@ -241,40 +249,36 @@ class AdversarialTrainer(BaseTrainer):
 
             metrics = {}
 
-            train_losses = self.train_step(epoch)
-
-            [
-                epoch_train_loss,
-                epoch_train_autoencoder_loss,
-                epoch_train_discriminator_loss,
-            ] = train_losses
+            epoch_train_loss, logs = self.train_step(epoch)
+           
+            metrics["train_mse"] = logs['train_mse']
+            metrics["train_kl"] = logs['train_kl']
+            metrics["train_cvib"] = logs['train_cvib']
             metrics["train_epoch_loss"] = epoch_train_loss
-            metrics["train_autoencoder_loss"] = epoch_train_autoencoder_loss
-            metrics["train_discriminator_loss"] = epoch_train_discriminator_loss
+            metrics["train_autoencoder_loss"] = logs['epoch_train_autoencoder_loss']
+            metrics["train_discriminator_loss"] = logs['epoch_train_discriminator_loss']
 
             if self.eval_dataset is not None:
-                eval_losses = self.eval_step(epoch)
+                epoch_eval_loss, logs = self.eval_step(epoch)
 
-                [
-                    epoch_eval_loss,
-                    epoch_eval_autoencoder_loss,
-                    epoch_eval_discriminator_loss,
-                ] = eval_losses
                 metrics["eval_epoch_loss"] = epoch_eval_loss
-                metrics["eval_autoencoder_loss"] = epoch_eval_autoencoder_loss
-                metrics["eval_discriminator_loss"] = epoch_eval_discriminator_loss
+                metrics["eval_autoencoder_loss"] = logs['epoch_eval_autoencoder_loss']
+                metrics["eval_discriminator_loss"] = logs['epoch_eval_autoencoder_loss']
+                metrics["eval_mse"] = logs['eval_mse']
+                metrics["eval_kl"] = logs['eval_kl']
+                metrics["eval_cvib"] = logs['eval_cvib']
 
                 self._schedulers_step(
-                    autoencoder_metrics=epoch_eval_autoencoder_loss,
-                    discriminator_metrics=epoch_eval_discriminator_loss,
+                    autoencoder_metrics=logs['epoch_eval_autoencoder_loss'],
+                    discriminator_metrics=logs['epoch_eval_autoencoder_loss'],
                 )
 
             else:
                 epoch_eval_loss = best_eval_loss
 
                 self._schedulers_step(
-                    autoencoder_metrics=epoch_train_autoencoder_loss,
-                    discriminator_metrics=epoch_train_discriminator_loss,
+                    autoencoder_metrics=logs['epoch_train_autoencoder_loss'],
+                    discriminator_metrics=logs['epoch_train_discriminator_loss'],
                 )
 
             if (
@@ -356,6 +360,9 @@ class AdversarialTrainer(BaseTrainer):
         epoch_autoencoder_loss = 0
         epoch_discriminator_loss = 0
         epoch_loss = 0
+        mse = 0
+        kl = 0
+        cvib = 0
 
         for inputs in self.eval_loader:
 
@@ -390,8 +397,17 @@ class AdversarialTrainer(BaseTrainer):
         epoch_autoencoder_loss /= len(self.eval_loader)
         epoch_discriminator_loss /= len(self.eval_loader)
         epoch_loss /= len(self.eval_loader)
+        mse /= len(self.eval_loader)
+        kl /= len(self.eval_loader)
+        cvib /= len(self.eval_loader)
+        logs = {}
+        logs['eval_mse'] = mse
+        logs['eval_kl'] = kl
+        logs['eval_cvib'] = cvib
+        logs['epoch_eval_autoencoder_loss'] = epoch_autoencoder_loss 
+        logs['epoch_eval_discriminator_loss'] = epoch_discriminator_loss
 
-        return epoch_loss, epoch_autoencoder_loss, epoch_discriminator_loss
+        return epoch_loss, logs
 
     def train_step(self, epoch: int):
         """The trainer performs training loop over the train_loader.
@@ -414,6 +430,9 @@ class AdversarialTrainer(BaseTrainer):
         epoch_autoencoder_loss = 0
         epoch_discriminator_loss = 0
         epoch_loss = 0
+        mse = 0
+        cvib = 0
+        kl = 0
 
         for inputs in self.train_loader:
 
@@ -427,25 +446,70 @@ class AdversarialTrainer(BaseTrainer):
 
             autoencoder_loss = model_output.autoencoder_loss
             discriminator_loss = model_output.discriminator_loss
-
             loss = autoencoder_loss + discriminator_loss
 
             epoch_autoencoder_loss += autoencoder_loss.item()
             epoch_discriminator_loss += discriminator_loss.item()
             epoch_loss += loss.item()
+            mse += model_output.reconstruction_loss.item()
+            kl += model_output.reg_loss.item()
+            cvib += model_output.cvib_loss.item()
+
+            if epoch_loss != epoch_loss:
+                raise ArithmeticError("NaN detected in train loss")
 
             self.callback_handler.on_train_step_end(
                 training_config=self.training_config
             )
 
         # Allows model updates if needed
-        self.model.update()
+        logs = {}
+        if epoch % self.training_config.steps_saving == 0:
 
-        epoch_autoencoder_loss /= len(self.train_loader)
-        epoch_discriminator_loss /= len(self.train_loader)
+            evaluation_pipeline = EvaluationPipeline(
+            model=self.model, device=self.device,
+            eval_loader=self.eval_loader
+            )    
+            print('Disentanglement Metrics at epoch: ', epoch)
+            disentanglement_metrics, normalized_SEPIN = evaluation_pipeline.disentanglement_metrics()
+           
+            idx_min_SEPIN = np.argmin(normalized_SEPIN)
+            min_SEPIN = normalized_SEPIN[idx_min_SEPIN]
+
+            for i in range(normalized_SEPIN.shape[0]):
+                name_metric='train_SEPIN_'+str(i)
+                logs[name_metric] = normalized_SEPIN[i]
+
+            if min_SEPIN < 1e-5 and self.update_architecture:
+                perturbations = []
+                idxs = np.where(normalized_SEPIN<1e-5)
+                for idx in idxs[0]:
+                   model_output_ = self.model(
+                   inputs, epoch=epoch, dataset_size=len(self.train_loader.dataset), mask_idx=idx
+                   )
+                   perturbations.append(torch.abs(loss - model_output_.loss))
+                pb = torch.stack(perturbations).detach().cpu().numpy()
+                if np.min(pb) < 5:
+                    min_pb_idx = np.argmin(pb)
+                    update_idx = idxs[0][min_pb_idx]
+                    self.model.update(update_idx)
+                    self._best_model = deepcopy(self.model)
+                else:
+                    print('architecture could not be updated, minimum perturbation applied =', np.min(pb))
+
+
         epoch_loss /= len(self.train_loader)
+        mse /= len(self.train_loader)
+        kl /= len(self.train_loader)
+        cvib /= len(self.train_loader)
 
-        return epoch_loss, epoch_autoencoder_loss, epoch_discriminator_loss
+        logs['train_mse'] = mse
+        logs['train_kl'] = kl
+        logs['train_cvib'] = cvib
+        logs['epoch_train_autoencoder_loss'] = epoch_autoencoder_loss 
+        logs['epoch_train_discriminator_loss'] = epoch_discriminator_loss
+
+        return epoch_loss, logs
 
     def save_checkpoint(self, model: BaseAE, dir_path, epoch: int):
         """Saves a checkpoint alowing to restart training from here

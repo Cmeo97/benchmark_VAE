@@ -2,9 +2,15 @@ examples/data/cifar-10-python.tar.gz
 examples/data/cifar-10-batches-py/
 examples/data/*
 examples/scripts/data/
-
+tmp
+examples/scripts/tmp
+examples/scripts/reproducibility/
+reproducibility/
 codecov*
-
+nohup.out
+examples/scripts/nohup.out
+*.pdf
+*.png
 __pycache__
 #docs
 src/pythae.egg-info

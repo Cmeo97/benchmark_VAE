@@ -195,3 +195,21 @@ class BetaTCVAE(VAE):
         W.view(-1)[1 :: M + 1] = strat_weight
         W[M - 1, 0] = strat_weight
         return W.log()
+
+
+    def update(self, idx_to_remove):
+        n = self.encoder.weights_embedding.shape[0]
+        idxs_ = np.arange(n)
+        idxs = np.delete(idxs_, idx_to_remove)
+        print('updating architecture')
+        with torch.no_grad():
+            self.encoder.weights_embedding = torch.nn.Parameter(self.encoder.weights_embedding[idxs, :])
+            self.encoder.weights_log_var = torch.nn.Parameter(self.encoder.weights_log_var[idxs, :])
+            self.encoder.bias_embedding = torch.nn.Parameter(self.encoder.bias_embedding[idxs])
+            self.encoder.bias_log_var = torch.nn.Parameter(self.encoder.bias_log_var[idxs])
+            self.decoder.layers[0][0].weight = torch.nn.Parameter(self.decoder.layers[0][0].weight.data[:, idxs])
+            self.decoder.layers[0][0].in_channels = n - 1
+            self.decoder.pos_embedding.channels_map.weight = torch.nn.Parameter(self.decoder.pos_embedding.channels_map.weight.data[idxs])
+            self.decoder.pos_embedding.channels_map.bias = torch.nn.Parameter(self.decoder.pos_embedding.channels_map.bias.data[idxs])
+            self.decoder.pos_embedding.channels_map.out_channels = n - 1
+

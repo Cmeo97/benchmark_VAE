@@ -322,7 +322,7 @@ class WandbCallback(TrainingCallback):  # pragma: no cover
             and reconstructions is not None
             and generations is not None
         ):
-            for i in range(len(true_data)):
+            for i in range(int(len(true_data)/2)):
 
                 data_to_log.append(
                     [

@@ -92,7 +92,15 @@ ap.add_argument(
     help='seed',
     type=int,
     default=0,
-    choices=[0,1,2,3,4,5],
+    choices=[0,1,2,3,4,5,6,7,8,9,10],
+)
+
+ap.add_argument(
+    "--latent_dim",
+    help='latent dimensions ',
+    type=int,
+    default=10,
+    choices=[7,10],
 )
 
 ap.add_argument(
@@ -184,9 +192,9 @@ def main(args):
             
     if args.dataset == "3Dshapes": 
 
-        from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
+        #from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
         #from pythae.models.nn.benchmarks.shapes import Decoder_Conv_VAE_3DSHAPES as Decoder_VAE
-        #from pythae.models.nn.benchmarks.shapes import Equivariant_Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
+        from pythae.models.nn.benchmarks.shapes import Equivariant_Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
         #from pythae.models.nn.benchmarks.shapes import Equivariant_SBD_Conv_VAE_3DSHAPES as Decoder_VAE
         from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
         dataset = h5py.File('/home/cristianmeo/Datasets/3dshapes.h5', 'r')
@@ -200,8 +208,9 @@ def main(args):
 
         from pythae.models.nn.benchmarks.dsprites import Encoder_Conv_VAE_DSPRITES as Encoder_VAE
         from pythae.models.nn.benchmarks.dsprites import SBD_Conv_VAE_DSPRITES as Decoder_VAE
+        #from pythae.models.nn.benchmarks.dsprites import Decoder_Conv_VAE_DSPRITES as Decoder_VAE
         dataset = h5py.File('/home/cristianmeo/Datasets/dsprites-dataset/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.hdf5', 'r')
-        image_data =  np.expand_dims(np.array(dataset['imgs']), 1) / 255.0
+        image_data =  np.expand_dims(np.array(dataset['imgs']), 1)
 
         train_data = image_data[:int(image_data.shape[0]*0.8)]
         eval_data = image_data[int(image_data.shape[0]*0.8):]
@@ -671,7 +680,7 @@ def main(args):
     callbacks = []
 
     if args.use_wandb:
-        name_exp = args.model_name+'-'+args.dataset+'-'+str(args.seed)
+        name_exp = args.model_name+'-'+args.dataset+'-'+str(args.latent_dim)+'-'+str(args.update_architecture)+'-'+str(args.seed)
         print(name_exp)
         from pythae.trainers.training_callbacks import WandbCallback
 
@@ -684,7 +693,7 @@ def main(args):
 
         callbacks.append(wandb_cb)
 
-    pipeline = TrainingPipeline(training_config=training_config, model=model, update_architecture=args.update_architecture)
+    pipeline = TrainingPipeline(training_config=training_config, model=model, update_architecture=args.update_architecture, name_exp=name_exp)
 
     pipeline(train_data=train_data, eval_data=eval_data, callbacks=callbacks)
 

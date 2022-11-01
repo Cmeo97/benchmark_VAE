@@ -3,7 +3,7 @@ from typing import Optional
 
 import torch
 import torch.nn.functional as F
-
+import numpy as np
 from ...customexception import BadInheritanceError
 from ...data.datasets import BaseDataset
 from ..base.base_utils import ModelOutput
@@ -11,7 +11,8 @@ from ..nn import BaseDecoder, BaseDiscriminator, BaseEncoder
 from ..vae import VAE
 from .factor_vae_config import FactorVAEConfig
 from .factor_vae_utils import FactorVAEDiscriminator
-
+from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES
+from pythae.models.nn.benchmarks.dsprites import SBD_Conv_VAE_DSPRITES 
 
 class FactorVAE(VAE):
     """
@@ -98,8 +99,13 @@ class FactorVAE(VAE):
 
         std = torch.exp(0.5 * log_var)
         z, _ = self._sample_gauss(mu, std)
+        if 'mask_idx' in kwargs.keys():
+            self.store_parameters()
+            self.apply_parameters_mask(kwargs['mask_idx'])    
         recon_x = self.decoder(z)["reconstruction"]
+        
 
+    
         # second batch
         x_bis = inputs["data"][idx_2]
 
@@ -112,15 +118,18 @@ class FactorVAE(VAE):
 
         z_bis_permuted = self._permute_dims(z_bis).detach()
 
-        recon_loss, autoencoder_loss, discriminator_loss = self.loss_function(
+        recon_loss, autoencoder_loss, discriminator_loss, KL, TC = self.loss_function(
             recon_x, x, mu, log_var, z, z_bis_permuted
         )
 
         loss = autoencoder_loss + discriminator_loss
-
+        if 'mask_idx' in kwargs.keys():
+            self.restore_parameters()
         output = ModelOutput(
             loss=loss,
-            recon_loss=recon_loss,
+            reconstruction_loss=recon_loss,
+            cvib_loss=TC,
+            reg_loss=KL,
             autoencoder_loss=autoencoder_loss,
             discriminator_loss=discriminator_loss,
             recon_x=recon_x,
@@ -181,6 +190,8 @@ class FactorVAE(VAE):
             (recon_loss).mean(dim=0),
             (autoencoder_loss).mean(dim=0),
             (discriminator_loss).mean(dim=0),
+            (KLD).mean(dim=0),
+            (TC).mean(dim=0),
         )
 
     def reconstruct(self, inputs: torch.Tensor):
@@ -270,3 +281,93 @@ class FactorVAE(VAE):
             permuted[:, i] = z[perms, i]
 
         return permuted
+
+    def update(self, idx_to_remove):
+        n = self.encoder.weights_embedding.shape[0]
+        idxs_ = np.arange(n)
+        idxs = np.delete(idxs_, idx_to_remove)
+        print('updating architecture')
+        with torch.no_grad():
+            self.encoder.weights_embedding = torch.nn.Parameter(self.encoder.weights_embedding[idxs, :])
+            self.encoder.weights_log_var = torch.nn.Parameter(self.encoder.weights_log_var[idxs, :])
+            self.encoder.bias_embedding = torch.nn.Parameter(self.encoder.bias_embedding[idxs])
+            self.encoder.bias_log_var = torch.nn.Parameter(self.encoder.bias_log_var[idxs])
+            self.discriminator.weights_dl_1 = torch.nn.Parameter(self.discriminator.weights_dl_1[:, idxs])
+            if isinstance(self.decoder, SBD_Conv_VAE_3DSHAPES) or isinstance(self.decoder, SBD_Conv_VAE_DSPRITES): 
+                self.decoder.layers[0][0].weight = torch.nn.Parameter(self.decoder.layers[0][0].weight.data[:, idxs])
+                self.decoder.layers[0][0].in_channels = n - 1
+                self.decoder.pos_embedding.channels_map.weight = torch.nn.Parameter(self.decoder.pos_embedding.channels_map.weight.data[idxs])
+                self.decoder.pos_embedding.channels_map.bias = torch.nn.Parameter(self.decoder.pos_embedding.channels_map.bias.data[idxs])
+                self.decoder.pos_embedding.channels_map.out_channels = n - 1
+            else: 
+                self.decoder.weights_dec_1 = torch.nn.Parameter(self.decoder.weights_dec_1[:, idxs])
+
+    def apply_parameters_mask(self, mask_idx):
+        
+        self.encoder.weights_embedding.data[mask_idx]                 = self.encoder.weights_embedding.data[mask_idx]                 * 0
+        self.encoder.weights_log_var.data[mask_idx]                   = self.encoder.weights_log_var.data[mask_idx]                   * 0
+        self.encoder.bias_embedding.data[mask_idx]                    = self.encoder.bias_embedding.data[mask_idx]                    * 0
+        self.encoder.bias_log_var.data[mask_idx]                      = self.encoder.bias_log_var.data[mask_idx]                      * 0
+        self.discriminator.weights_dl_1.data[:,mask_idx]              = self.discriminator.weights_dl_1.data[:,mask_idx]              * 0
+        
+        if isinstance(self.decoder, SBD_Conv_VAE_3DSHAPES) or isinstance(self.decoder, SBD_Conv_VAE_DSPRITES): 
+            self.decoder.layers[0][0].weight.data[:, mask_idx]            = self.decoder.layers[0][0].weight.data[:, mask_idx]            * 0
+            self.decoder.pos_embedding.channels_map.weight.data[mask_idx] = self.decoder.pos_embedding.channels_map.weight.data[mask_idx] * 0
+            self.decoder.pos_embedding.channels_map.bias.data[mask_idx]   = self.decoder.pos_embedding.channels_map.bias.data[mask_idx]   * 0
+        else: 
+            self.decoder.weights_dec_1.data[:, mask_idx] = self.decoder.weights_dec_1.data[:, mask_idx] * 0
+        
+        
+        with torch.no_grad():
+            self.encoder.weights_embedding = torch.nn.Parameter(self.encoder.weights_embedding.data)
+            self.encoder.weights_log_var = torch.nn.Parameter(self.encoder.weights_log_var.data)
+            self.encoder.bias_embedding = torch.nn.Parameter(self.encoder.bias_embedding.data)
+            self.encoder.bias_log_var = torch.nn.Parameter(self.encoder.bias_log_var.data)
+            self.discriminator.weights_dl_1 = torch.nn.Parameter(self.discriminator.weights_dl_1.data)
+            if isinstance(self.decoder, SBD_Conv_VAE_3DSHAPES) or isinstance(self.decoder, SBD_Conv_VAE_DSPRITES): 
+                self.decoder.layers[0][0].weight = torch.nn.Parameter(self.decoder.layers[0][0].weight.data)
+                self.decoder.pos_embedding.channels_map.weight = torch.nn.Parameter(self.decoder.pos_embedding.channels_map.weight.data)
+                self.decoder.pos_embedding.channels_map.bias = torch.nn.Parameter(self.decoder.pos_embedding.channels_map.bias.data)
+            else:
+                self.decoder.weights_dec_1 = torch.nn.Parameter(self.decoder.weights_dec_1.data)
+
+
+    def store_parameters(self):
+        self.stored_weights_embedding  =  self.encoder.weights_embedding 
+        self.stored_weights_log_var =  self.encoder.weights_log_var
+        self.stored_bias_embedding  =  self.encoder.bias_embedding 
+        self.stored_bias_log_var  =  self.encoder.bias_log_var 
+        self.stored_layers_weight  =  self.decoder.layers[0][0].weight 
+        self.stored_layers_in_channels  =  self.decoder.layers[0][0].in_channels 
+        self.discriminator_weights_dl_1     = self.discriminator.weights_dl_1
+         
+        if isinstance(self.decoder, SBD_Conv_VAE_3DSHAPES) or isinstance(self.decoder, SBD_Conv_VAE_DSPRITES): 
+             self.stored_pos_embedding_channels_map_weight =  self.decoder.pos_embedding.channels_map.weight
+             self.stored_pos_embedding_channels_map_bias =  self.decoder.pos_embedding.channels_map.bias
+             self.stored_pos_embedding_channels_map_out_channels  =  self.decoder.pos_embedding.channels_map.out_channels 
+        else: 
+             self.decoder_weights_dec_1 = self.decoder.weights_dec_1
+
+
+       
+
+    def restore_parameters(self):
+        self.encoder.weights_embedding = self.stored_weights_embedding                            
+        self.encoder.weights_log_var = self.stored_weights_log_var                              
+        self.encoder.bias_embedding = self.stored_bias_embedding                               
+        self.encoder.bias_log_var = self.stored_bias_log_var                                 
+        self.decoder.layers[0][0].weight = self.stored_layers_weight                                
+        self.decoder.layers[0][0].in_channels = self.stored_layers_in_channels 
+        self.discriminator.weights_dl_1 = self.discriminator_weights_dl_1     
+         
+        if isinstance(self.decoder, SBD_Conv_VAE_3DSHAPES) or isinstance(self.decoder, SBD_Conv_VAE_DSPRITES): 
+            self.decoder.pos_embedding.channels_map.weight = self.stored_pos_embedding_channels_map_weight            
+            self.decoder.pos_embedding.channels_map.bias = self.stored_pos_embedding_channels_map_bias              
+            self.decoder.pos_embedding.channels_map.out_channels = self.stored_pos_embedding_channels_map_out_channels  
+        else: 
+            self.decoder.weights_dec_1 = self.decoder_weights_dec_1  
+
+
+
+                
+
