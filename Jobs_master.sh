@@ -61,8 +61,12 @@ do
 						do
 							for latent_dim in "${All_latent_dims[@]}"
 							do
-                bash train.sh $Dataset $Method $arc_update $seed $beta $alpha $C $latent_dim &
-				sleep 300
+                			bash train.sh $Dataset $Method $arc_update $seed $beta $alpha $C $latent_dim &
+							sleep 60
+							done
+						done
+					done
+				done
             done
 		done
 	done
