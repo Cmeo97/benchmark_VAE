@@ -5,15 +5,14 @@ from typing import List
 import torch
 from torch import Tensor
 import torch.nn as nn
-import torch.nn.init as init
-from pythae.models.nn import BaseDecoder, BaseDiscriminator, BaseEncoder
+from pythae.models.nn import BaseDecoder, BaseEncoder
 
 from ....base import BaseAEConfig
 from ....base.base_utils import ModelOutput
 from ...base_architectures import BaseDecoder, BaseEncoder
 
 from math import sqrt
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import List, Optional
 import torch.nn.functional as F
 
 
@@ -33,12 +32,12 @@ class Decoder_Conv_VAE_3DSHAPES(BaseDecoder):
 
         layers = nn.ModuleList()
 
-        layers.append(nn.Linear(args.latent_dim, 128 * 4 * 4))
+        layers.append(nn.Linear(args.latent_dim, 64 * 2 * 2))
 
 
         layers.append(
             nn.Sequential(
-                nn.ConvTranspose2d(128, 64, 4, 2, padding=1),
+                nn.ConvTranspose2d(64, 64, 4, 2, padding=1),
                 nn.ReLU(),
             )
         )
@@ -46,26 +45,34 @@ class Decoder_Conv_VAE_3DSHAPES(BaseDecoder):
 
         layers.append(
             nn.Sequential(
-                nn.ConvTranspose2d(64, 32, 4, 2, padding=1),
+                nn.ConvTranspose2d(64, 64, 4, 2, padding=1),
                 nn.ReLU(),
             )
         )
 
         layers.append(
             nn.Sequential(
-                nn.ConvTranspose2d(32, 32, 4, 2, padding=1),
+                nn.ConvTranspose2d(64, 64, 4, 2, padding=1),
                 nn.ReLU(),
             )
         )
 
         layers.append(
             nn.Sequential(
-                nn.ConvTranspose2d(32, self.n_channels, 4, 2, padding=1)
+                nn.ConvTranspose2d(64, self.n_channels, 4, 2, padding=1)
             )
         )
 
         self.layers = layers
         self.depth = len(layers)
+        self.init_weights()
+    
+    def init_weights(self):
+        for i in range(self.depth):
+            if isinstance(self.layers[i][0], nn.Conv2d) or isinstance(self.layers[i][0], nn.Linear):
+                self.layers[i][0].weight.data.normal_(0, 0.01)
+                nn.init.constant_(self.layers[i][0].bias.data, 0.0001)
+       
 
     def forward(self, z: torch.Tensor, output_layer_levels: List[int] = None):
         """Forward method
@@ -106,7 +113,7 @@ class Decoder_Conv_VAE_3DSHAPES(BaseDecoder):
             #print(out.shape)
 
             if i == 0:
-                out = out.reshape(z.shape[0], 128, 4, 4)
+                out = out.reshape(z.shape[0], 64, 2, 2)
                 #print(out.shape)
 
             if output_layer_levels is not None:
@@ -119,12 +126,12 @@ class Decoder_Conv_VAE_3DSHAPES(BaseDecoder):
         return output
 
 
-#before 10:09 I used RELu, after Leaky 
+
 
 
 class Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
     """<
-    A Convolutional encoder suited for MNIST and Variational Autoencoder-based
+    A Convolutional encoder suited for 3DShapes and Variational Autoencoder-based
     models. """
 
 
@@ -178,158 +185,23 @@ class Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
         self.layers = layers
         self.depth = len(layers)
 
-        self.embedding = nn.Linear(256, args.latent_dim)
-        self.log_var = nn.Linear(256, args.latent_dim)
-
-        self.init_weights()
-    
-    def init_weights(self):
-        for i in range(self.depth):
-            if isinstance(self.layers[i][0], nn.Conv2d) or isinstance(self.layers[i][0], nn.Linear):
-                self.layers[i][0].weight.data.normal_(0, 0.01)
-                nn.init.constant_(self.layers[i][0].bias.data, 0)
-        self.embedding.weight.data.normal_(0, 0.01)
-        nn.init.constant_(self.embedding.bias.data, 0)
-        self.log_var.weight.data.normal_(0, 0.01)
-        nn.init.constant_(self.log_var.bias.data, 0)
-
-
-
-    def forward(self, x: torch.Tensor, output_layer_levels: List[int] = None):
-        """Forward method
-
-        Args:
-            output_layer_levels (List[int]): The levels of the layers where the outputs are
-                extracted. If None, the last layer's output is returned. Default: None.
-
-        Returns:
-            ModelOutput: An instance of ModelOutput containing the embeddings of the input data
-            under the key `embedding` and the **log** of the diagonal coefficient of the covariance
-            matrices under the key `log_covariance`. Optional: The outputs of the layers specified
-            in `output_layer_levels` arguments are available under the keys `embedding_layer_i`
-            where i is the layer's level."""
-        output = ModelOutput()
-
-        max_depth = self.depth
-
-        if output_layer_levels is not None:
-
-            assert all(
-                self.depth >= levels > 0 or levels == -1
-                for levels in output_layer_levels
-            ), (
-                f"Cannot output layer deeper than depth ({self.depth})."
-                f"Got ({output_layer_levels})"
-            )
-
-            if -1 in output_layer_levels:
-                max_depth = self.depth
-            else:
-                max_depth = max(output_layer_levels)
-
-        out = x
-
-        for i in range(max_depth):
-            out = self.layers[i](out)
-            #print(out.shape)
-
-            if output_layer_levels is not None:
-                if i + 1 in output_layer_levels:
-                    output[f"embedding_layer_{i+1}"] = out
-
-            if i + 1 == self.depth:
-                output["embedding"] = self.embedding(out)
-                output["log_covariance"] = self.log_var(out)
-
-        return output
-
-
-
-class Equivariant_Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
-    """<
-    A Convolutional encoder suited for MNIST and Variational Autoencoder-based
-    models. """
-
-
-
-    def __init__(self, args: BaseAEConfig):
-        BaseEncoder.__init__(self)
-
-        self.input_dim = (3, 64, 64)
-        self.latent_dim = args.latent_dim
-        self.n_channels = 3
-
-        layers = nn.ModuleList()
-
-        layers.append(
-            nn.Sequential(
-                nn.Conv2d(in_channels=self.n_channels,  out_channels=64, kernel_size=4, stride=2, padding=1),
-                nn.ReLU(),
-            )
-        )
-
-        layers.append(
-            nn.Sequential(
-                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=4, stride=2, padding=1),
-                nn.ReLU()
-            )
-        )
-
-        layers.append(
-            nn.Sequential(
-                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=4, stride=2, padding=1),
-                nn.ReLU()
-            )
-        )
-
-        layers.append(
-            nn.Sequential(
-                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=4, stride=2, padding=1),
-                nn.ReLU()
-            )
-        )
-
-        layers.append(
-            nn.Sequential(
-                nn.Flatten(),
-                nn.Linear(in_features=1024, out_features=256),
-                nn.ReLU(),
-            )
-        )
-
-        #layers.append(
-        #    nn.Sequential(
-        #        nn.Linear(in_features=256, out_features=16),
-        #        nn.ReLU(),
-        #    )
-        #)
-
-
-        self.layers = layers
-        self.depth = len(layers)
-
-        #self.embedding = nn.Linear(256, args.latent_dim)
-        #self.log_var = nn.Linear(256, args.latent_dim)
         self.weights_embedding = torch.nn.Parameter(torch.randn(self.latent_dim, 256))
         self.weights_log_var = torch.nn.Parameter(torch.randn(self.latent_dim, 256))
         self.bias_embedding = torch.nn.Parameter(torch.randn(self.latent_dim))
         self.bias_log_var = torch.nn.Parameter(torch.randn(self.latent_dim))
-        #self.inputattention = InputAttentionModule(args.latent_dim, 16, 2)
+   
         self.init_weights()
     
     def init_weights(self):
         for i in range(self.depth):
             if isinstance(self.layers[i][0], nn.Conv2d) or isinstance(self.layers[i][0], nn.Linear):
                 self.layers[i][0].weight.data.normal_(0, 0.01)
-                nn.init.constant_(self.layers[i][0].bias.data, 0)
+                nn.init.constant_(self.layers[i][0].bias.data, 0.001)
         self.weights_log_var.data.normal_(0, 0.01)
         self.weights_embedding.data.normal_(0, 0.01)
-        nn.init.constant_(self.bias_embedding.data, 0)
-        nn.init.constant_(self.bias_log_var.data, 0)
-        #self.embedding.weight.data.normal_(0, 0.01)
-        #nn.init.constant_(self.embedding.bias.data, 0)
-        #self.log_var.weight.data.normal_(0, 0.01)
-        #nn.init.constant_(self.log_var.bias.data, 0)
+        nn.init.constant_(self.bias_embedding.data, 0.001)
+        nn.init.constant_(self.bias_log_var.data, 0.001)
+       
         
 
 
@@ -369,8 +241,6 @@ class Equivariant_Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
 
         for i in range(max_depth):
             out = self.layers[i](out)
-        
-            #print(out.shape)
 
             if output_layer_levels is not None:
                 if i + 1 in output_layer_levels:
@@ -379,152 +249,15 @@ class Equivariant_Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
             if i + 1 == self.depth:
                 output["embedding"] = F.linear(out, self.weights_embedding, self.bias_embedding)
                 output["log_covariance"] = F.linear(out, self.weights_log_var, self.bias_log_var)
-                #h = self.inputattention(out.unsqueeze(1))
-                #output["embedding"] = h[:, : , 0]
-                #output["log_covariance"] = h[: , :, 1]
-                #print(h.shape)
+              
             
-
-        return output
-
-        #self.layers[5][0].weight = torch.nn.Parameter(self.layers[5][0].weight.data[2:8])
-
-
-
-class Equivariant_SBD_Conv_VAE_3DSHAPES(BaseDecoder):
-    """
-    A Convolutional decoder suited for DSPRITES and Autoencoder-based
-    models. """
-
-
-    def __init__(self, args: dict):
-        BaseDecoder.__init__(self)
-        self.input_dim = (3, 64, 64)
-        self.latent_dim = args.latent_dim
-        self.n_channels = self.input_dim[0]
-        self.w_broadcast = self.input_dim[1]
-        self.h_broadcast = self.input_dim[2]
-      
-
-        self.pos_embedding = PositionalEmbedding(self.input_dim[1], self.input_dim[2], self.latent_dim)
-     
-        layers = nn.ModuleList()
-
-        layers.append(
-            nn.Sequential(
-                nn.Conv2d(in_channels=self.latent_dim, out_channels=64, kernel_size=3, stride=1, padding=1),
-                nn.ReLU(),
-            )
-        )
-
-        layers.append(
-            nn.Sequential(
-                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
-                nn.ReLU(),
-            )
-        )
-
-        layers.append(
-            nn.Sequential(
-                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
-                nn.ReLU(),
-            )
-        )
-
-        layers.append(
-            nn.Sequential(
-                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
-                nn.ReLU(),
-            )
-        )
-
-        layers.append(
-            nn.Sequential(
-                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
-                nn.ReLU(),
-            )
-        )
-
-        layers.append(
-            nn.Sequential(
-                nn.Conv2d(in_channels=64, out_channels=self.n_channels,  kernel_size=3, stride=1, padding=1),
-                nn.Sigmoid()
-            )
-        )
-
-        self.layers = layers
-        self.depth = len(layers)
-        self.latent_attention = LatentAttentionModule(self.latent_dim)
-
-        self.init_weights()
-    
-    def init_weights(self):
-        for i in range(self.depth):
-            if isinstance(self.layers[i][0], nn.Conv2d) or isinstance(self.layers[i][0], nn.Linear):
-                self.layers[i][0].weight.data.normal_(0, 0.01)
-                nn.init.constant_(self.layers[i][0].bias.data, 0)
-            
-     
-    def spatial_broadcast(self, z: Tensor) -> Tensor:
-        z = z.unsqueeze(-1).unsqueeze(-1)
-        return z.repeat(1, 1, self.w_broadcast, self.h_broadcast)
-     
-        
-
-    def forward(self, z: torch.Tensor, output_layer_levels: List[int] = None):
-        """Forward method
-
-        Args:
-            output_layer_levels (List[int]): The levels of the layers where the outputs are
-                extracted. If None, the last layer's output is returned. Default: None.
-
-        Returns:
-            ModelOutput: An instance of ModelOutput containing the reconstruction of the latent code
-            under the key `reconstruction`. Optional: The outputs of the layers specified in
-            `output_layer_levels` arguments are available under the keys `reconstruction_layer_i`
-            where i is the layer's level.
-        """
-        output = ModelOutput()
-
-        z = self.latent_attention(z.unsqueeze(2)).squeeze(2)
-        z = self.spatial_broadcast(z)
-        z = self.pos_embedding(z)
-        max_depth = self.depth
-
-        if output_layer_levels is not None:
-
-            assert all(
-                self.depth >= levels > 0 or levels == -1
-                for levels in output_layer_levels
-            ), (
-                f"Cannot output layer deeper than depth ({self.depth})."
-                f"Got ({output_layer_levels})"
-            )
-
-            if -1 in output_layer_levels:
-                max_depth = self.depth
-            else:
-                max_depth = max(output_layer_levels)
-
-        out = z
-        
-        for i in range(max_depth):
-            out = self.layers[i](out)
-            #print(out.shape)
-
-            if output_layer_levels is not None:
-                if i + 1 in output_layer_levels:
-                    output[f"reconstruction_layer_{i+1}"] = out
-
-            if i + 1 == self.depth:
-                output["reconstruction"] = out
 
         return output
 
 
 class SBD_Conv_VAE_3DSHAPES(BaseDecoder):
     """
-    A Convolutional decoder suited for DSPRITES and Autoencoder-basedAlso if you need I can help you run some experiments as well. I think it would be nice if we help each other in our submissions
+    A Convolutional decoder suited for 3Dshapes and Autoencoder-based
     models. """
 
 
@@ -592,7 +325,7 @@ class SBD_Conv_VAE_3DSHAPES(BaseDecoder):
         for i in range(self.depth):
             if isinstance(self.layers[i][0], nn.Conv2d) or isinstance(self.layers[i][0], nn.Linear):
                 self.layers[i][0].weight.data.normal_(0, 0.01)
-                nn.init.constant_(self.layers[i][0].bias.data, 0)
+                nn.init.constant_(self.layers[i][0].bias.data, 0.001)
             
      
     def spatial_broadcast(self, z: Tensor) -> Tensor:
@@ -613,8 +346,6 @@ class SBD_Conv_VAE_3DSHAPES(BaseDecoder):
             where i is the layer's level.
         """
         output = ModelOutput()
-        #bs = z.shape[0]
-        #z = z.unsqueeze(2).flatten(0, 1)
         z = self.spatial_broadcast(z)
         z = self.pos_embedding(z)
         max_depth = self.depth
@@ -638,7 +369,6 @@ class SBD_Conv_VAE_3DSHAPES(BaseDecoder):
         
         for i in range(max_depth):
             out = self.layers[i](out)
-            #print(out.shape)
 
             if output_layer_levels is not None:
                 if i + 1 in output_layer_levels:
@@ -846,61 +576,6 @@ class InputAttentionModule(nn.Module):
 
         return latent
 
-
-class LatentAttentionModule(nn.Module):
-    def __init__(self, latent_dim, iters=3, eps=1e-8):
-       
-        super().__init__()
-        self.latent_dim = latent_dim
-        #dim = 1
-        self.eps = eps
-        self.scale = latent_dim**-0.5
-        #self.iters = iters
-        #self.latent_mu = nn.Parameter(torch.rand(1, 10, dim))
-        #self.latent_log_sigma = nn.Parameter(torch.randn(1, 10, dim))
-        #with torch.no_grad():
-        #    limit = sqrt(6.0 / (1 + dim))
-        #    torch.nn.init.uniform_(self.latent_mu, -limit, limit)
-        #    torch.nn.init.uniform_(self.latent_log_sigma, -limit, limit)
-        #self.to_q = nn.Linear(dim, dim, bias=False)
-        #self.to_k = nn.Linear(dim, dim, bias=False)
-        #self.to_v = nn.Linear(dim, dim, bias=False)
-
-        #hidden_dim = 8
-        #hidden_dim = max(dim, hidden_dim)
-
-        #self.mlp = nn.Sequential(
-        #    nn.Linear(dim, hidden_dim),
-        #    nn.ReLU(inplace=True),
-        #    nn.Linear(hidden_dim, dim),
-        #)
-        #self.gru = nn.GRUCell(dim, dim)
-
-        #self.norm_input = nn.LayerNorm(dim, eps=0.001)
-        #self.norm_latent = nn.LayerNorm(dim, eps=0.001)
-        #self.norm_pre_ff = nn.LayerNorm(dim, eps=0.001)
-        #self.dim = dim
-
-    def forward(self, latent_mu: Tensor, latent_log_var: Tensor, eps=1e-8, latent_dim=10) -> Tensor:
-        b, n = latent_mu.shape
-        
-        mu = latent_mu.unsqueeze(1).expand(b, latent_dim, n) # [b, latent_dim, current dim ]
-        std =torch.exp(0.5* latent_log_var.unsqueeze(1).expand(b,  latent_dim, n))  #[b, latent_dim, current dim]
-        #latent = torch.normal(mu, sigma)   # reparametrization -> [b, latent_dim]
-      
-        z = mu + std * torch.randn_like(std) # #[b, latent_dim, current dim]
-  
-        dots = torch.einsum("bid,bjd->bij", latent_mu.unsqueeze(2), z) * latent_mu.shape[1]**-0.5
-        attn = dots.softmax(dim=1) + eps
-        attn = attn / attn.sum(dim=-1, keepdim=True)
-        latent = torch.einsum("bjd,bij->bid", latent_mu.unsqueeze(2), attn)
-        #latent = self.gru(
-        #    updates.reshape(-1, self.dim), latent_prev.reshape(-1, self.dim)
-        #)
-        #latent = latent.reshape(b, -1, self.dim)
-        #latent = latent + self.mlp(self.norm_pre_ff(latent))
-
-        return latent
 
 class PositionalEmbedding(nn.Module):
     def __init__(self, height: int, width: int, channels: int):

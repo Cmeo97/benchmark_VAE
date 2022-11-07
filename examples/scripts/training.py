@@ -88,11 +88,15 @@ ap.add_argument(
     action="store_true",
 )
 ap.add_argument(
+    "--use_comet",
+    help="whether to log the metrics in comet",
+    action="store_true",
+)
+ap.add_argument(
     "--seed",
     help='seed',
     type=int,
     default=0,
-    choices=[0,1,2,3,4,5,6,7,8,9,10],
 )
 
 ap.add_argument(
@@ -100,7 +104,27 @@ ap.add_argument(
     help='latent dimensions ',
     type=int,
     default=10,
-    choices=[7,10],
+)
+
+ap.add_argument(
+    "--C_factor",
+    help='capacity factor',
+    type=float,
+    default=30,
+)
+
+ap.add_argument(
+    "--alpha",
+    help='bound balance',
+    type=float,
+    default=0.5,
+)
+
+ap.add_argument(
+    "--beta",
+    help='beta of VIB',
+    type=float,
+    default=1,
 )
 
 ap.add_argument(
@@ -128,74 +152,10 @@ args = ap.parse_args()
 
 def main(args):
 
-    if args.dataset == "mnist":
-
-        if args.nn == "convnet":
-
-            from pythae.models.nn.benchmarks.mnist import Encoder_Conv_AE_MNIST as Encoder_AE
-            from pythae.models.nn.benchmarks.mnist import Encoder_Conv_VAE_MNIST as Encoder_VAE
-            from pythae.models.nn.benchmarks.mnist import Encoder_Conv_SVAE_MNIST as Encoder_SVAE
-            from pythae.models.nn.benchmarks.mnist import Encoder_Conv_AE_MNIST as Encoder_VQVAE
-            from pythae.models.nn.benchmarks.mnist import Decoder_Conv_AE_MNIST as Decoder_AE
-            from pythae.models.nn.benchmarks.mnist import Decoder_Conv_AE_MNIST as Decoder_VQVAE
-
-        elif args.nn == "resnet":
-            from pythae.models.nn.benchmarks.mnist import Encoder_ResNet_AE_MNIST as Encoder_AE
-            from pythae.models.nn.benchmarks.mnist import Encoder_ResNet_VAE_MNIST as Encoder_VAE
-            from pythae.models.nn.benchmarks.mnist import Encoder_ResNet_SVAE_MNIST as Encoder_SVAE
-            from pythae.models.nn.benchmarks.mnist import Encoder_ResNet_VQVAE_MNIST as Encoder_VQVAE
-            from pythae.models.nn.benchmarks.mnist import Decoder_ResNet_AE_MNIST as Decoder_AE
-            from pythae.models.nn.benchmarks.mnist import Decoder_ResNet_VQVAE_MNIST as Decoder_VQVAE
-        
-        
-        from pythae.models.nn.benchmarks.mnist import (
-            Discriminator_Conv_MNIST as Discriminator,
-        )
-
-    elif args.dataset == "cifar10":
-
-        if args.nn == "convnet":
-
-            from pythae.models.nn.benchmarks.cifar import Encoder_Conv_AE_CIFAR as Encoder_AE
-            from pythae.models.nn.benchmarks.cifar import Encoder_Conv_VAE_CIFAR as Encoder_VAE
-            from pythae.models.nn.benchmarks.cifar import Encoder_Conv_SVAE_CIFAR as Encoder_SVAE
-            from pythae.models.nn.benchmarks.cifar import Encoder_Conv_AE_CIFAR as Encoder_VQVAE
-            from pythae.models.nn.benchmarks.cifar import Decoder_Conv_AE_CIFAR as Decoder_AE
-            from pythae.models.nn.benchmarks.cifar import Decoder_Conv_AE_CIFAR as Decoder_VQVAE
-
-        elif args.nn == "resnet":
-            from pythae.models.nn.benchmarks.cifar import Encoder_ResNet_AE_CIFAR as Encoder_AE
-            from pythae.models.nn.benchmarks.cifar import Encoder_ResNet_VAE_CIFAR as Encoder_VAE
-            from pythae.models.nn.benchmarks.cifar import Encoder_ResNet_SVAE_CIFAR as Encoder_SVAE
-            from pythae.models.nn.benchmarks.cifar import Encoder_ResNet_VQVAE_CIFAR as Encoder_VQVAE
-            from pythae.models.nn.benchmarks.cifar import Decoder_ResNet_AE_CIFAR as Decoder_AE
-            from pythae.models.nn.benchmarks.cifar import Decoder_ResNet_VQVAE_CIFAR as Decoder_VQVAE
-
-    elif args.dataset == "celeba":
-
-        if args.nn == "convnet":
-
-            from pythae.models.nn.benchmarks.celeba import Encoder_Conv_AE_CELEBA as Encoder_AE
-            from pythae.models.nn.benchmarks.celeba import Encoder_Conv_VAE_CELEBA as Encoder_VAE
-            from pythae.models.nn.benchmarks.celeba import Encoder_Conv_SVAE_CELEBA as Encoder_SVAE
-            from pythae.models.nn.benchmarks.celeba import Encoder_Conv_AE_CELEBA as Encoder_VQVAE
-            from pythae.models.nn.benchmarks.celeba import Decoder_Conv_AE_CELEBA as Decoder_AE
-            from pythae.models.nn.benchmarks.celeba import Decoder_Conv_AE_CELEBA as Decoder_VQVAE
-
-        elif args.nn == "resnet":
-            from pythae.models.nn.benchmarks.celeba import Encoder_ResNet_AE_CELEBA as Encoder_AE
-            from pythae.models.nn.benchmarks.celeba import Encoder_ResNet_VAE_CELEBA as Encoder_VAE
-            from pythae.models.nn.benchmarks.celeba import Encoder_ResNet_SVAE_CELEBA as Encoder_SVAE
-            from pythae.models.nn.benchmarks.celeba import Encoder_ResNet_VQVAE_CELEBA as Encoder_VQVAE
-            from pythae.models.nn.benchmarks.celeba import Decoder_ResNet_AE_CELEBA as Decoder_AE
-            from pythae.models.nn.benchmarks.celeba import Decoder_ResNet_VQVAE_CELEBA as Decoder_VQVAE
             
     if args.dataset == "3Dshapes": 
 
-        #from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
-        #from pythae.models.nn.benchmarks.shapes import Decoder_Conv_VAE_3DSHAPES as Decoder_VAE
-        from pythae.models.nn.benchmarks.shapes import Equivariant_Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
-        #from pythae.models.nn.benchmarks.shapes import Equivariant_SBD_Conv_VAE_3DSHAPES as Decoder_VAE
+        from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
         from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
         dataset = h5py.File('/home/cristianmeo/Datasets/3dshapes.h5', 'r')
         
@@ -271,262 +231,6 @@ def main(args):
             decoder=Decoder_VAE(model_config),
         )
 
-    elif args.model_name == "vae":
-        from pythae.models import VAE, VAEConfig
-
-        if args.model_config is not None:
-            model_config = VAEConfig.from_json_file(args.model_config)
-
-        else:
-            model_config = VAEConfig()
-
-        model_config.input_dim = data_input_dim
-
-        model = VAE(
-            model_config=model_config,
-            encoder=Encoder_VAE(model_config),
-            decoder=Decoder_AE(model_config),
-        )
-
-    elif args.model_name == "iwae":
-        from pythae.models import IWAE, IWAEConfig
-
-        if args.model_config is not None:
-            model_config = IWAEConfig.from_json_file(args.model_config)
-
-        else:
-            model_config = IWAEConfig()
-
-        model_config.input_dim = data_input_dim
-
-        model = IWAE(
-            model_config=model_config,
-            encoder=Encoder_VAE(model_config),
-            decoder=Decoder_AE(model_config),
-        )
-
-    elif args.model_name == "info_vae":
-        from pythae.models import INFOVAE_MMD, INFOVAE_MMD_Config
-
-        if args.model_config is not None:
-            model_config = INFOVAE_MMD_Config.from_json_file(args.model_config)
-
-        else:
-            model_config = INFOVAE_MMD_Config()
-
-        model_config.input_dim = data_input_dim
-
-        model = INFOVAE_MMD(
-            model_config=model_config,
-            encoder=Encoder_VAE(model_config),
-            decoder=Decoder_AE(model_config),
-        )
-
-    elif args.model_name == "wae":
-        from pythae.models import WAE_MMD, WAE_MMD_Config
-
-        if args.model_config is not None:
-            model_config = WAE_MMD_Config.from_json_file(args.model_config)
-
-        else:
-            model_config = WAE_MMD_Config()
-
-        model_config.input_dim = data_input_dim
-
-        model = WAE_MMD(
-            model_config=model_config,
-            encoder=Encoder_AE(model_config),
-            decoder=Decoder_AE(model_config),
-        )
-
-    elif args.model_name == "rae_l2":
-        from pythae.models import RAE_L2, RAE_L2_Config
-
-        if args.model_config is not None:
-            model_config = RAE_L2_Config.from_json_file(args.model_config)
-
-        else:
-            model_config = RAE_L2_Config()
-
-        model_config.input_dim = data_input_dim
-
-        model = RAE_L2(
-            model_config=model_config,
-            encoder=Encoder_AE(model_config),
-            decoder=Decoder_AE(model_config),
-        )
-
-    elif args.model_name == "rae_gp":
-        from pythae.models import RAE_GP, RAE_GP_Config
-
-        if args.model_config is not None:
-            model_config = RAE_GP_Config.from_json_file(args.model_config)
-
-        else:
-            model_config = RAE_GP_Config()
-
-        model_config.input_dim = data_input_dim
-
-        model = RAE_GP(
-            model_config=model_config,
-            encoder=Encoder_AE(model_config),
-            decoder=Decoder_AE(model_config),
-        )
-
-    elif args.model_name == "vamp":
-        from pythae.models import VAMP, VAMPConfig
-
-        if args.model_config is not None:
-            model_config = VAMPConfig.from_json_file(args.model_config)
-
-        else:
-            model_config = VAMPConfig()
-
-        model_config.input_dim = data_input_dim
-
-        model = VAMP(
-            model_config=model_config,
-            encoder=Encoder_VAE(model_config),
-            decoder=Decoder_AE(model_config),
-        )
-
-    elif args.model_name == "beta_vae":
-        from pythae.models import BetaVAE, BetaVAEConfig
-        print(args.model_config)
-        if args.model_config is not None:
-            model_config = BetaVAEConfig.from_json_file(args.model_config)
-
-        else:
-            model_config = BetaVAEConfig()
-
-        model_config.input_dim = data_input_dim
-
-        model = BetaVAE(
-            model_config=model_config,
-            encoder=Encoder_VAE(model_config),
-            decoder=Decoder_VAE(model_config),
-        )
-
-    elif args.model_name == "hvae":
-        from pythae.models import HVAE, HVAEConfig
-
-        if args.model_config is not None:
-            model_config = HVAEConfig.from_json_file(args.model_config)
-
-        else:
-            model_config = HVAEConfig()
-
-        model_config.input_dim = data_input_dim
-
-        model = HVAE(
-            model_config=model_config,
-            encoder=Encoder_VAE(model_config),
-            decoder=Decoder_AE(model_config),
-        )
-
-    elif args.model_name == "rhvae":
-        from pythae.models import RHVAE, RHVAEConfig
-
-        if args.model_config is not None:
-            model_config = RHVAEConfig.from_json_file(args.model_config)
-
-        else:
-            model_config = RHVAEConfig()
-
-        model_config.input_dim = data_input_dim
-
-        model = RHVAE(
-            model_config=model_config,
-            encoder=Encoder_VAE(model_config),
-            decoder=Decoder_AE(model_config),
-        )
-
-    elif args.model_name == "aae":
-        from pythae.models import Adversarial_AE, Adversarial_AE_Config
-
-        if args.model_config is not None:
-            model_config = Adversarial_AE_Config.from_json_file(args.model_config)
-
-        else:
-            model_config = Adversarial_AE_Config()
-
-        model_config.input_dim = data_input_dim
-
-        model = Adversarial_AE(
-            model_config=model_config,
-            encoder=Encoder_VAE(model_config),
-            decoder=Decoder_AE(model_config),
-        )
-
-    elif args.model_name == "vaegan":
-        from pythae.models import VAEGAN, VAEGANConfig
-
-        if args.model_config is not None:
-            model_config = VAEGANConfig.from_json_file(args.model_config)
-
-        else:
-            model_config = VAEGANConfig()
-
-        model_config.input_dim = data_input_dim
-
-        model = VAEGAN(
-            model_config=model_config,
-            encoder=Encoder_VAE(model_config),
-            decoder=Decoder_AE(model_config),
-            discriminator=Discriminator(model_config),
-        )
-
-    elif args.model_name == "vqvae":
-        from pythae.models import VQVAE, VQVAEConfig
-
-        if args.model_config is not None:
-            model_config = VQVAEConfig.from_json_file(args.model_config)
-
-        else:
-            model_config = VQVAEConfig()
-
-        model_config.input_dim = data_input_dim
-
-        model = VQVAE(
-            model_config=model_config,
-            encoder=Encoder_VQVAE(model_config),
-            decoder=Decoder_VQVAE(model_config),
-        )
-
-    elif args.model_name == "msssim_vae":
-        from pythae.models import MSSSIM_VAE, MSSSIM_VAEConfig
-
-        if args.model_config is not None:
-            model_config = MSSSIM_VAEConfig.from_json_file(args.model_config)
-
-        else:
-            model_config = MSSSIM_VAEConfig()
-
-        model_config.input_dim = data_input_dim
-
-        model = MSSSIM_VAE(
-            model_config=model_config,
-            encoder=Encoder_VAE(model_config),
-            decoder=Decoder_AE(model_config),
-        )
-
-    elif args.model_name == "svae":
-        from pythae.models import SVAE, SVAEConfig
-
-        if args.model_config is not None:
-            model_config = SVAEConfig.from_json_file(args.model_config)
-
-        else:
-            model_config = SVAE()
-
-        model_config.input_dim = data_input_dim
-
-        model = SVAE(
-            model_config=model_config,
-            encoder=Encoder_SVAE(model_config),
-            decoder=Decoder_AE(model_config),
-        )
-
     elif args.model_name == "disentangled_beta_vae":
         from pythae.models import DisentangledBetaVAE, DisentangledBetaVAEConfig
 
@@ -537,6 +241,9 @@ def main(args):
             model_config = DisentangledBetaVAEConfig()
 
         model_config.input_dim = data_input_dim
+        model_config.C = args.C_factor
+        model_config.latent_dim = args.latent_dim
+        model_config.beta = args.beta
 
         model = DisentangledBetaVAE(
             model_config=model_config,
@@ -554,6 +261,10 @@ def main(args):
             model_config = TCVAEConfig()
 
         model_config.input_dim = data_input_dim
+        model_config.alpha = args.alpha
+        model_config.C = args.C_factor
+        model_config.latent_dim = args.latent_dim
+        model_config.beta = args.beta
 
         model = TCVAE(
             model_config=model_config,
@@ -578,56 +289,6 @@ def main(args):
             decoder=Decoder_VAE(model_config),
         )
 
-    elif args.model_name == "beta_tc_vae":
-        from pythae.models import BetaTCVAE, BetaTCVAEConfig
-
-        if args.model_config is not None:
-            model_config = BetaTCVAEConfig.from_json_file(args.model_config)
-
-        else:
-            model_config = BetaTCVAEConfig()
-
-        model_config.input_dim = data_input_dim
-
-        model = BetaTCVAE(
-            model_config=model_config,
-            encoder=Encoder_VAE(model_config),
-            decoder=Decoder_VAE(model_config),
-        )
-
-    elif args.model_name == "vae_iaf":
-        from pythae.models import VAE_IAF, VAE_IAF_Config
-
-        if args.model_config is not None:
-            model_config = VAE_IAF_Config.from_json_file(args.model_config)
-
-        else:
-            model_config = VAE_IAF_Config()
-
-        model_config.input_dim = data_input_dim
-
-        model = VAE_IAF(
-            model_config=model_config,
-            encoder=Encoder_VAE(model_config),
-            decoder=Decoder_AE(model_config),
-        )
-
-    elif args.model_name == "vae_lin_nf":
-        from pythae.models import VAE_LinNF, VAE_LinNF_Config
-
-        if args.model_config is not None:
-            model_config = VAE_LinNF_Config.from_json_file(args.model_config)
-
-        else:
-            model_config = VAE_LinNF_Config()
-
-        model_config.input_dim = data_input_dim
-
-        model = VAE_LinNF(
-            model_config=model_config,
-            encoder=Encoder_VAE(model_config),
-            decoder=Decoder_AE(model_config),
-        )
 
         print(model)
 
@@ -654,23 +315,9 @@ def main(args):
 
     logger.info(f"Model config of {args.model_name.upper()}: {model_config}\n")
 
-    if model.model_name == "RAE_L2":
-        training_config = CoupledOptimizerTrainerConfig.from_json_file(
-            args.training_config
-        )
 
-    elif model.model_name == "Adversarial_AE" or model.model_name == "FactorVAE":
+    if model.model_name == "Adversarial_AE" or model.model_name == "FactorVAE":
         training_config = AdversarialTrainerConfig.from_json_file(args.training_config)
-
-    elif model.model_name == "VAEGAN":
-        from pythae.trainers import (
-            CoupledOptimizerAdversarialTrainer,
-            CoupledOptimizerAdversarialTrainerConfig,
-        )
-
-        training_config = CoupledOptimizerAdversarialTrainerConfig.from_json_file(
-            args.training_config
-        )
 
     else:
         training_config = BaseTrainerConfig.from_json_file(args.training_config)
@@ -678,10 +325,10 @@ def main(args):
     logger.info(f"Training config: {training_config}\n")
 
     callbacks = []
-
+    name_exp = args.model_name+'-test-'+args.dataset+'-'+str(args.latent_dim)+'-'+str(args.update_architecture)+'-'+str(args.seed)
+    print(name_exp)
     if args.use_wandb:
-        name_exp = args.model_name+'-'+args.dataset+'-'+str(args.latent_dim)+'-'+str(args.update_architecture)+'-'+str(args.seed)
-        print(name_exp)
+        
         from pythae.trainers.training_callbacks import WandbCallback
 
         wandb_cb = WandbCallback()
@@ -693,7 +340,35 @@ def main(args):
 
         callbacks.append(wandb_cb)
 
-    pipeline = TrainingPipeline(training_config=training_config, model=model, update_architecture=args.update_architecture, name_exp=name_exp)
+    if args.use_comet:
+        # Create you callback
+        from pythae.trainers.training_callbacks import CometCallback
+
+        comet_cb = CometCallback() # Build the callback 
+
+        # SetUp the callback 
+        comet_cb.setup(
+            training_config=training_config, # training config
+            model_config=model_config, # model config
+            api_key="qXdTq22JXVov2VvqWgZBj4eRr", # specify your comet api-key
+            project_name="tc-vae", # specify your wandb project
+            exp_name=name_exp,
+            #offline_run=True, # run in offline mode
+            #offline_directory='my_offline_runs' # set the directory to store the offline runs
+        )
+
+        callbacks.append(comet_cb) # Add it to the callbacks list
+
+    kwargs = {}
+    kwargs['beta'] = args.beta
+    kwargs['C'] = args.C_factor
+    kwargs['alpha'] = args.alpha
+    kwargs['latent_dim'] = args.latent_dim
+    kwargs['update_architecture'] = args.update_architecture
+    kwargs['name_exp'] = name_exp
+
+
+    pipeline = TrainingPipeline(training_config=training_config, model=model, kwargs=kwargs)
 
     pipeline(train_data=train_data, eval_data=eval_data, callbacks=callbacks)
 

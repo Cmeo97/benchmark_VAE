@@ -19,43 +19,56 @@ s_5 = pd.read_csv(r'wandb_s10.csv')
 s_0 = pd.read_csv(r'wandb_s11.csv')
 
 metrics = {}
-metrics['sep_7'] = pd.read_csv(r'wandb_s2.csv')
-metrics['sep_3'] = pd.read_csv(r'wandb_s3.csv')
-metrics['sep_9'] = pd.read_csv(r'wandb_s4.csv')
-metrics['sep_8'] = pd.read_csv(r'wandb_s5.csv')
-metrics['sep_1'] = pd.read_csv(r'wandb_s6.csv')
-metrics['sep_6'] = pd.read_csv(r'wandb_s7.csv')
-metrics['sep_2'] = pd.read_csv(r'wandb_s8.csv')
-metrics['sep_4'] = pd.read_csv(r'wandb_s9.csv')
-metrics['sep_5'] = pd.read_csv(r'wandb_s10.csv')
-metrics['sep_0'] = pd.read_csv(r'wandb_s11.csv')
+metrics['sep_7'] = pd.read_csv(r'sepin_7.csv')
+metrics['sep_3'] = pd.read_csv(r'sepin_3.csv')
+metrics['sep_9'] = pd.read_csv(r'sepin_9.csv')
+metrics['sep_8'] = pd.read_csv(r'sepin_8.csv')
+metrics['sep_1'] = pd.read_csv(r'sepin_1.csv')
+metrics['sep_6'] = pd.read_csv(r'sepin_6.csv')
+metrics['sep_2'] = pd.read_csv(r'sepin_2.csv')
+metrics['sep_4'] = pd.read_csv(r'sepin_4.csv')
+metrics['sep_5'] = pd.read_csv(r'sepin_5.csv')
+metrics['sep_0'] = pd.read_csv(r'sepin_0.csv')
 
 metrics_p = {}
 for j in range(7):
-    keys = 'disentangled_beta_vae-3Dshapes-10-True-'+str(9)+' - train/SEPIN_'+str(j)
+    keys = 'tc_vae-3Dshapes-10-True-'+str(8)+' - train/SEPIN_'+str(j)
     metrics_p['s_'+str(j)] = metrics['sep_'+str(j)][keys]
 
 sepin_list = np.array(metrics_p)
 
-s_1  = metrics['sep_0']['disentangled_beta_vae-3Dshapes-10-True-'+str(9)+' - train/SEPIN_'+str(0)]
-s_2  = metrics['sep_1']['disentangled_beta_vae-3Dshapes-10-True-'+str(9)+' - train/SEPIN_'+str(1)]
-s_3  = metrics['sep_2']['disentangled_beta_vae-3Dshapes-10-True-'+str(9)+' - train/SEPIN_'+str(2)]
-s_4  = metrics['sep_3']['disentangled_beta_vae-3Dshapes-10-True-'+str(9)+' - train/SEPIN_'+str(3)]
-s_5  = metrics['sep_4']['disentangled_beta_vae-3Dshapes-10-True-'+str(9)+' - train/SEPIN_'+str(4)]
-s_6  = metrics['sep_5']['disentangled_beta_vae-3Dshapes-10-True-'+str(9)+' - train/SEPIN_'+str(5)]
-s_7  = metrics['sep_6']['disentangled_beta_vae-3Dshapes-10-True-'+str(9)+' - train/SEPIN_'+str(6)]
-s_8  = metrics['sep_7']['disentangled_beta_vae-3Dshapes-10-True-'+str(9)+' - train/SEPIN_'+str(7)]
-s_9  = metrics['sep_8']['disentangled_beta_vae-3Dshapes-10-True-'+str(9)+' - train/SEPIN_'+str(8)]
-s_10 = metrics['sep_9']['disentangled_beta_vae-3Dshapes-10-True-'+str(9)+' - train/SEPIN_'+str(9)]
+metrics = pd.read_csv(r'sepin_tc_25.csv')
 
 
-s_1  = s_1[~np.isnan(s_1)][:7]
-s_2  = s_2[~np.isnan(s_2)][:7] 
-s_3  = s_3[~np.isnan(s_3)][:7] 
-s_4  = s_4[~np.isnan(s_4)][:7] 
-s_5  = s_5[~np.isnan(s_5)][:7] 
-s_6  = s_6[~np.isnan(s_6)][:7] 
-s_7  = s_7[~np.isnan(s_7)][:7] 
+#s_1  = metrics['disentangled_beta_vae-test-3Dshapes-10-False-0 - train/SEPIN_'+str(0)]
+#s_2  = metrics['disentangled_beta_vae-test-3Dshapes-10-False-0 - train/SEPIN_'+str(1)]
+#s_3  = metrics['disentangled_beta_vae-test-3Dshapes-10-False-0 - train/SEPIN_'+str(2)]
+#s_4  = metrics['disentangled_beta_vae-test-3Dshapes-10-False-0 - train/SEPIN_'+str(3)]
+#s_5  = metrics['disentangled_beta_vae-test-3Dshapes-10-False-0 - train/SEPIN_'+str(4)]
+#s_6  = metrics['disentangled_beta_vae-test-3Dshapes-10-False-0 - train/SEPIN_'+str(5)]
+#s_7  = metrics['disentangled_beta_vae-test-3Dshapes-10-False-0 - train/SEPIN_'+str(6)]
+#s_8  = metrics['disentangled_beta_vae-test-3Dshapes-10-False-0 - train/SEPIN_'+str(7)]
+#s_9  = metrics['disentangled_beta_vae-test-3Dshapes-10-False-0 - train/SEPIN_'+str(8)]
+#s_10 = metrics['disentangled_beta_vae-test-3Dshapes-10-False-0 - train/SEPIN_'+str(9)]
+#
+s_1  = metrics['tc_vae-test-3Dshapes-10-False-'+str(5)+' - train/SEPIN_'+str(0)]
+s_2  = metrics['tc_vae-test-3Dshapes-10-False-'+str(5)+' - train/SEPIN_'+str(1)]
+s_3  = metrics['tc_vae-test-3Dshapes-10-False-'+str(5)+' - train/SEPIN_'+str(2)]
+s_4  = metrics['tc_vae-test-3Dshapes-10-False-'+str(5)+' - train/SEPIN_'+str(3)]
+s_5  = metrics['tc_vae-test-3Dshapes-10-False-'+str(5)+' - train/SEPIN_'+str(4)]
+s_6  = metrics['tc_vae-test-3Dshapes-10-False-'+str(5)+' - train/SEPIN_'+str(5)]
+s_7  = metrics['tc_vae-test-3Dshapes-10-False-'+str(5)+' - train/SEPIN_'+str(6)]
+s_8  = metrics['tc_vae-test-3Dshapes-10-False-'+str(5)+' - train/SEPIN_'+str(7)]
+s_9  = metrics['tc_vae-test-3Dshapes-10-False-'+str(5)+' - train/SEPIN_'+str(8)]
+s_10 = metrics['tc_vae-test-3Dshapes-10-False-'+str(5)+' - train/SEPIN_'+str(9)]
+
+s_1  = s_1[~np.isnan(s_1)]
+s_2  = s_2[~np.isnan(s_2)] 
+s_3  = s_3[~np.isnan(s_3)] 
+s_4  = s_4[~np.isnan(s_4)] 
+s_5  = s_5[~np.isnan(s_5)] 
+s_6  = s_6[~np.isnan(s_6)] 
+s_7  = s_7[~np.isnan(s_7)] 
 s_8  = s_8[~np.isnan(s_8)] 
 s_9  = s_9[~np.isnan(s_9)] 
 s_10 = s_10[~np.isnan(s_10)] 
@@ -63,7 +76,7 @@ s_10 = s_10[~np.isnan(s_10)]
 
 plot_sepin = {}
 
-plot_sepin['steps'] = np.arange(7)*10
+plot_sepin['steps'] = np.arange(10)*10
 plot_sepin['z_0'] = s_1 
 plot_sepin['z_1'] = s_2 
 plot_sepin['z_2'] = s_3 
@@ -82,9 +95,9 @@ df = data_plot_sepin.melt(id_vars=['steps'], value_vars=['z_0', 'z_1', 'z_2', 'z
 p = (
   ggplot(df) +
   aes(x='steps', y='value', color='Metrics', group='Metrics') +
-  geom_line(size=1) +
-  geom_point(size=1)+
-  p9.labs(title = "Evaluation of Conditional Mutual Information ", x = "Epochs", y = "Conditional Mutual Information (I)") +
+  geom_line(size=1.5) +
+  geom_point(size=3)+
+  p9.labs(title = "Estimation of Conditional Mutual Information ", x = "Epochs", y = " MI") +
   p9.themes.theme(
     plot_title = p9.themes.element_text(hjust = 0.5, size = 16), 
     strip_text = p9.themes.element_text(size = 16),
@@ -95,8 +108,8 @@ p = (
   ) +  
   p9.theme(legend_title=p9.element_blank(), legend_text=p9.element_text(size=14)) 
 )
-p9.ggsave(p, filename = 'Metrics.png', width=6, height=3, dpi=600)
-
+p9.ggsave(p, filename = 'sepin_tc_vae.png', width=6, height=3, dpi=600)
+p9.ggsave(p, filename = 'sepin_tc_vae.pdf', width=6, height=3, dpi=600)
 
 train_loss = pd.read_csv(r'wandb_factor_vae_train.csv')
 eval_loss = pd.read_csv(r'wandb_factor_vae_eval.csv')

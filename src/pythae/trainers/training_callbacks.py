@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 def wandb_is_available():
     return importlib.util.find_spec("wandb") is not None
 
+def comet_is_available():
+    return importlib.util.find_spec("comet_ml") is not None
+
 
 def mlflow_is_available():
     return importlib.util.find_spec("mlflow") is not None
@@ -359,68 +362,128 @@ class WandbCallback(TrainingCallback):  # pragma: no cover
         self.run.finish()
 
 
-class MLFlowCallback(TrainingCallback):  # pragma: no cover
+
+class CometCallback(TrainingCallback):  # pragma: no cover
+    """
+    A :class:`TrainingCallback` integrating the experiment tracking tool
+    `comet_ml` (https://www.comet.com/site/).
+    It allows users to store their configs, monitor
+    their trainings and compare runs through a graphic interface. To be able use this feature
+    you will need:
+    - the package `comet_ml` installed in your virtual env. If not you can install it with
+    .. code-block::
+        $ pip install comet_ml
+    """
+
     def __init__(self):
-        if not mlflow_is_available():
+        if not comet_is_available():
             raise ModuleNotFoundError(
-                "`mlflow` package must be installed. Run `pip install mlflow`"
+                "`comet_ml` package must be installed. Run `pip install comet_ml`"
             )
 
         else:
-            import mlflow
+            import comet_ml
 
-            self._mlflow = mlflow
+            self._comet_ml = comet_ml
 
-    def setup(self, training_config, **kwargs):
+    def setup(
+        self,
+        training_config: BaseTrainerConfig,
+        model_config: BaseTrainerConfig = None,
+        api_key: str = None,
+        project_name: str = "pythae_experiment",
+        workspace: str = None,
+        exp_name: str=None,
+        offline_run: bool = False,
+        offline_directory: str = "./",
+        **kwargs,
+    ):
+
+        """
+        Setup the CometCallback.
+        args:
+            training_config (BaseTraineronfig): The training configuration used in the run.
+            model_config (BaseAEConfig): The model configuration used in the run.
+            api_key (str): Your personal comet-ml `api_key`.
+            project_name (str): The name of the wandb project to use.
+            workspace (str): The name of your comet-ml workspace
+            offline_run: (bool): Whether to run comet-ml in offline mode.
+            offline_directory (str): The path to store the offline runs. They can to be
+                synchronized then by running `comet upload`.
+        """
+
         self.is_initialized = True
-
-        model_config = kwargs.pop("model_config", None)
-        run_name = kwargs.pop("run_name", None)
 
         training_config_dict = training_config.to_dict()
 
-        self._mlflow.start_run(run_name=run_name)
-
-        logger.info(
-            f"MLflow run started with run_id={self._mlflow.active_run().info.run_id}"
+        
+        experiment = self._comet_ml.Experiment(
+            api_key=api_key, project_name=project_name
         )
-        if model_config is not None:
-            model_config_dict = model_config.to_dict()
+        experiment.set_name(exp_name)
+        experiment.log_other("Created from", "Cmeo97")
+        
 
-            self._mlflow.log_params(
-                {
-                    **training_config_dict,
-                    **model_config_dict,
-                }
-            )
+        experiment.log_parameters(
+            training_config, prefix="training_config/"
+        )
+        experiment.log_parameters(
+            model_config, prefix="model_config/"
+        )
 
-        else:
-            self._mlflow.log_params({**training_config_dict})
-
-    def on_train_begin(self, training_config, **kwargs):
+    def on_train_begin(self, training_config: BaseTrainerConfig, **kwargs):
         model_config = kwargs.pop("model_config", None)
         if not self.is_initialized:
             self.setup(training_config, model_config=model_config)
 
-    def on_log(self, training_config, logs, **kwargs):
+    def on_log(self, training_config: BaseTrainerConfig, logs, **kwargs):
         global_step = kwargs.pop("global_step", None)
 
-        logs = rename_logs(logs)
-        metrics = {}
-        for k, v in logs.items():
-            if isinstance(v, (int, float)):
-                metrics[k] = v
+        experiment = self._comet_ml.get_global_experiment()
+        experiment.log_metrics(logs, step=global_step, epoch=global_step)
 
-        self._mlflow.log_metrics(metrics=metrics, step=global_step)
+    def on_prediction_step(self, training_config: BaseTrainerConfig, **kwargs):
+        global_step = kwargs.pop("global_step", None)
+
+        column_names = ["images_id", "truth", "reconstruction", "normal_generation"]
+
+        true_data = kwargs.pop("true_data", None)
+        reconstructions = kwargs.pop("reconstructions", None)
+        generations = kwargs.pop("generations", None)
+
+        experiment = self._comet_ml.get_global_experiment()
+
+        if (
+            true_data is not None
+            and reconstructions is not None
+            and generations is not None
+        ):
+            for i in range(len(true_data)):
+
+                experiment.log_image(
+                    np.moveaxis(true_data[i].cpu().detach().numpy(), 0, -1),
+                    name=f"{i}_truth",
+                    step=global_step,
+                )
+                experiment.log_image(
+                    np.clip(
+                        np.moveaxis(reconstructions[i].cpu().detach().numpy(), 0, -1),
+                        0,
+                        255.0,
+                    ),
+                    name=f"{i}_reconstruction",
+                    step=global_step,
+                )
+                experiment.log_image(
+                    np.clip(
+                        np.moveaxis(generations[i].cpu().detach().numpy(), 0, -1),
+                        0,
+                        255.0,
+                    ),
+                    name=f"{i}_normal_generation",
+                    step=global_step,
+                )
 
     def on_train_end(self, training_config: BaseTrainerConfig, **kwargs):
-        self._mlflow.end_run()
-
-    def __del__(self):
-        # if the previous run is not terminated correctly, the fluent API will
-        # not let you start a new run before the previous one is killed
-        if (
-            callable(getattr(self._mlflow, "active_run", None))
-            and self._mlflow.active_run() is not None
-        ):
-            self._mlflow.end_run()
+        experiment = self._comet_ml.config.get_global_experiment()
+        experiment.end()

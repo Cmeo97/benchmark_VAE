@@ -65,8 +65,7 @@ class BaseTrainer:
         optimizer: Optional[torch.optim.Optimizer] = None,
         scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None,
         callbacks: List[TrainingCallback] = None,
-        update_architecture: bool = False,
-        name_exp: str = None,
+        kwargs=None, 
     ):
 
         if training_config is None:
@@ -83,13 +82,13 @@ class BaseTrainer:
             )
 
         self.training_config = training_config
-        self.name_exp = name_exp
+        self.name_exp = kwargs['name_exp']
 
         set_seed(self.training_config.seed)
 
         self.get_freer_gpu()
 
-        self.update_architecture = update_architecture
+        self.update_architecture = kwargs['update_architecture']
 
         device = (
             "cuda:"+str(self.freer_device)
@@ -584,22 +583,22 @@ class BaseTrainer:
                 name_metric='train_SEPIN_'+str(i)
                 logs[name_metric] = normalized_SEPIN[i]
 
-            if min_SEPIN < 1e-5 and self.update_architecture:
-                perturbations = []
-                idxs = np.where(normalized_SEPIN<1e-5)
-                for idx in idxs[0]:
-                   model_output_ = self.model(
-                   inputs, epoch=epoch, dataset_size=len(self.train_loader.dataset), mask_idx=idx
-                   )
-                   perturbations.append(torch.abs(loss - model_output_.loss))
-                pb = torch.stack(perturbations).detach().cpu().numpy()
-                if np.min(pb) < 5:
-                    min_pb_idx = np.argmin(pb)
-                    update_idx = idxs[0][min_pb_idx]
-                    self.model.update(update_idx)
-                    self._best_model = deepcopy(self.model)
-                else:
-                    print('architecture could not be updated, minimum perturbation applied =', np.min(pb))
+            #if min_SEPIN < 1e-5 and self.update_architecture:
+            #    perturbations = []
+            #    idxs = np.where(normalized_SEPIN<1e-5)
+            #    for idx in idxs[0]:
+            #       model_output_ = self.model(
+            #       inputs, epoch=epoch, dataset_size=len(self.train_loader.dataset), mask_idx=idx
+            #       )
+            #       perturbations.append(torch.abs(loss - model_output_.loss))
+            #    pb = torch.stack(perturbations).detach().cpu().numpy()
+            #    if np.min(pb) < 5:
+            #        min_pb_idx = np.argmin(pb)
+            #        update_idx = idxs[0][min_pb_idx]
+            #        self.model.update(update_idx)
+            #        self._best_model = deepcopy(self.model)
+            #    else:
+            #        print('architecture could not be updated, minimum perturbation applied =', np.min(pb))
 
         epoch_loss /= len(self.train_loader)
         mse /= len(self.train_loader)

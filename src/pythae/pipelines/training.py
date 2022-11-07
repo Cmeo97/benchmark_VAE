@@ -45,8 +45,7 @@ class TrainingPipeline(Pipeline):
         self,
         model: Optional[BaseAE],
         training_config: Optional[BaseTrainerConfig] = None,
-        update_architecture: bool = False,
-        name_exp: str = None, 
+        kwargs=None, 
     ):
 
         if training_config is None:
@@ -104,8 +103,7 @@ class TrainingPipeline(Pipeline):
         self.data_processor = DataProcessor()
         self.model = model
         self.training_config = training_config
-        self.update_architecture = update_architecture
-        self.name_exp = name_exp
+        self.kwargs = kwargs
 
     def _check_dataset(self, dataset: BaseDataset):
 
@@ -211,8 +209,7 @@ class TrainingPipeline(Pipeline):
                 eval_dataset=eval_dataset,
                 training_config=self.training_config,
                 callbacks=callbacks,
-                update_architecture=self.update_architecture,
-                name_exp=self.name_exp
+                kwargs=self.kwargs
             )
 
         elif isinstance(self.training_config, CoupledOptimizerAdversarialTrainerConfig):
@@ -233,8 +230,7 @@ class TrainingPipeline(Pipeline):
                 eval_dataset=eval_dataset,
                 training_config=self.training_config,
                 callbacks=callbacks,
-                update_architecture=self.update_architecture,
-                name_exp=self.name_exp
+                kwargs=self.kwargs
             )
 
         self.trainer = trainer

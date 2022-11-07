@@ -29,11 +29,21 @@ ProjectName="Disentanlement_benchmark"
 
 declare -a All_Datasets=(3Dshapes) #"ClutteredCompoundGoalTileCoordinationHeterogeneityEnv"
 
-declare -a All_Methods=(tc_vae)
+declare -a All_Methods=(disentangled_beta_vae factor_vae tc_vae)
 
 declare -a All_seeds=(1 2 3)
 
 declare -a All_architecture_updates=(False)
+
+declare -a All_alphas=(0 0.25 0.50 0.75 1)
+
+declare -a All_betas=(1 2 3 4)
+
+declare -a All_Cs=(15 30 45)
+
+declare -a All_latent_dims=(7 10 15 20)
+
+
 
 for Dataset in "${All_Datasets[@]}"
 do
@@ -43,7 +53,16 @@ do
 		do	
 			for seed in "${All_seeds[@]}"
 			do
-                bash train.sh $Dataset $Method $arc_update $seed &
+				for beta in "${All_betas[@]}"
+				do
+					for alpha in "${All_alphas[@]}"
+					do
+						for C in "${All_Cs[@]}"
+						do
+							for latent_dim in "${All_latent_dims[@]}"
+							do
+                bash train.sh $Dataset $Method $arc_update $seed $beta $alpha $C $latent_dim &
+				sleep 300
             done
 		done
 	done

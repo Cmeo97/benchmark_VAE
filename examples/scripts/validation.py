@@ -66,6 +66,7 @@ ap.add_argument(
         "vae_nf",
         "vae_iaf",
         "vae_lin_nf",
+        "tc_vae",
     ],
     required=True,
 )
@@ -180,10 +181,7 @@ def main(args):
             
     if args.dataset == "3Dshapes": 
 
-        #from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
-        #from pythae.models.nn.benchmarks.shapes import Decoder_Conv_VAE_3DSHAPES as Decoder_VAE
-        from pythae.models.nn.benchmarks.shapes import Equivariant_Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
-        #from pythae.models.nn.benchmarks.shapes import Equivariant_SBD_Conv_VAE_3DSHAPES as Decoder_VAE
+        from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
         from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
 
         dataset = h5py.File('/home/cristianmeo/Datasets/3dshapes.h5', 'r')
@@ -428,6 +426,24 @@ def main(args):
             encoder=Encoder_VAE(model_config),
             decoder=Decoder_AE(model_config),
         )
+
+    elif args.model_name == "tc_vae":
+        from pythae.models import TCVAE, TCVAEConfig
+
+        if args.model_config is not None:
+            model_config = TCVAEConfig.from_json_file(args.model_config)
+
+        else:
+            model_config = TCVAEConfig()
+
+        model_config.input_dim = data_input_dim
+
+        model = TCVAE(
+            model_config=model_config,
+            encoder=Encoder_VAE(model_config),
+            decoder=Decoder_VAE(model_config),
+        )
+
 
     elif args.model_name == "aae":
         from pythae.models import Adversarial_AE, Adversarial_AE_Config
@@ -720,9 +736,9 @@ def main(args):
     #    output_dir='/home/cristianmeo/benchmark_VAE/examples/scripts/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+"/checkpoint_epoch_"+str(i),
     #    return_gen=True
     #    )
-    exp_name = 'DisentangledBetaVAE_training_2022-10-19_16-39-02'
+    #exp_name = 'DisentangledBetaVAE_training_2022-10-19_16-39-02'
     my_trained_vae = AutoModel.load_from_folder(
-        '/home/cristianmeo/benchmark_VAE/examples/scripts/reproducibility/'+str(args.dataset)+'/'+str(exp_name)+'/final_model'
+        '/home/cristianmeo/benchmark_VAE/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+'/checkpoint_epoch_70'
     )
         #my_sampler_config = MAFSamplerConfig(
         #n_made_blocks=2,
@@ -752,7 +768,7 @@ def main(args):
     device=device
     )    
     
-    disentanglement_metrics, normalized_SEPIN = evaluation_pipeline.disentanglement_metrics()
+    #disentanglement_metrics, normalized_SEPIN = evaluation_pipeline.disentanglement_metrics()
     #metrics.append(disentanglement_metrics)
     #metrics.append(normalized_SEPIN)
 
@@ -761,7 +777,7 @@ def main(args):
     gen_data = evaluation_pipeline.sample(
     num_samples=50,
     batch_size=10,
-    output_dir='/home/cristianmeo/benchmark_VAE/examples/scripts/reproducibility/'+str(args.dataset)+'/'+str(exp_name)+"/final_model",
+    output_dir='/home/cristianmeo/benchmark_VAE/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+"/checkpoint_epoch_70",
     return_gen=True
     )
     #print(metrics)

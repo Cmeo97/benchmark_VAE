@@ -193,6 +193,9 @@ class AutoModel(nn.Module):
             from ..piwae import PIWAE
 
             model = PIWAE.load_from_folder(dir_path=dir_path)
+        elif model_name =="TCVAEConfig":
+            from ..tc_vae import TCVAE
+            model = TCVAE.load_from_folder(dir_path=dir_path)
 
         else:
             raise NameError(

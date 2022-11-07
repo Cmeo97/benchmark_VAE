@@ -23,3 +23,4 @@ class TCVAEConfig(VAEConfig):
     C: float = 50.0
     warmup_epoch: int = 25
     alpha : float = 0.5
+    latent_dim: int = 10

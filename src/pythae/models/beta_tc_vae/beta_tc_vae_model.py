@@ -49,6 +49,7 @@ class BetaTCVAE(VAE):
         self.beta = model_config.beta
         self.gamma = model_config.gamma
         self.use_mss = model_config.use_mss
+        
 
     def forward(self, inputs: BaseDataset, **kwargs):
         """

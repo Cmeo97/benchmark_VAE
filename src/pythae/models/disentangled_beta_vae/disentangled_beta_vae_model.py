@@ -74,16 +74,16 @@ class DisentangledBetaVAE(VAE):
 
         std = torch.exp(0.5 * log_var)
         z, eps = self._sample_gauss(mu, std)
-        if 'mask_idx' in kwargs.keys():
-            self.store_parameters()
-            self.apply_parameters_mask(kwargs['mask_idx'])    
+        #if 'mask_idx' in kwargs.keys():
+        #    self.store_parameters()
+        #    self.apply_parameters_mask(kwargs['mask_idx'])    
 
         #z = self.E_attention(mu, log_var)
         recon_x = self.decoder(z)["reconstruction"]
 
         loss, recon_loss, kld = self.loss_function(recon_x, x, mu, log_var, z, epoch)
-        if 'mask_idx' in kwargs.keys():
-            self.restore_parameters()
+        #if 'mask_idx' in kwargs.keys():
+        #    self.restore_parameters()
         
         output = ModelOutput(
             reconstruction_loss=recon_loss,
@@ -106,13 +106,6 @@ class DisentangledBetaVAE(VAE):
                 reduction="none",
             ).sum(dim=-1)
 
-        elif self.model_config.reconstruction_loss == "bce":
-
-            recon_loss = F.binary_cross_entropy(
-                recon_x.reshape(x.shape[0], -1),
-                x.reshape(x.shape[0], -1),
-                reduction="none",
-            ).sum(dim=-1)
 
         KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp(), dim=-1)
         C_factor = min(epoch / (self.warmup_epoch + 1), 1)

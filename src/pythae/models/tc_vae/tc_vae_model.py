@@ -76,14 +76,15 @@ class TCVAE(VAE):
         std = torch.exp(0.5 * log_var)
         z, eps = self._sample_gauss(mu, std)
 
-        mu_p = (mu/(std+1e-12)).sum(dim=1)/(1/(std+1e-12)).sum(dim=1)
+        mu_p = ((mu*(std+1e-8)**-1).sum(dim=1)*((1/(std+1e-8)).sum(dim=1))**-1).unsqueeze(1)
 
-        std_p = (1/(std+1e-12)).sum(dim=1)
+        std_p = (((std+1e-8)**-1).sum(dim=1)).unsqueeze(1)
 
-        #z = self.E_attention(mu, log_var)
         recon_x = self.decoder(z)["reconstruction"]
 
-        loss, recon_loss, kld, cvib = self.loss_function(recon_x, x, mu, log_var, std, mu_p.unsqueeze(1), std_p.unsqueeze(1), epoch)
+        loss, recon_loss, kld, cvib = self.loss_function(recon_x, x, mu, log_var, std, mu_p, std_p, epoch)
+
+        
 
         output = ModelOutput(
             reconstruction_loss=recon_loss,
@@ -106,47 +107,27 @@ class TCVAE(VAE):
                 reduction="none",
             ).sum(dim=-1)
 
-        elif self.model_config.reconstruction_loss == "bce":
-
-            recon_loss = F.binary_cross_entropy(
-                recon_x.reshape(x.shape[0], -1),
-                x.reshape(x.shape[0], -1),
-                reduction="none",
-            ).sum(dim=-1)
   
-        KLD_f = -0.5 * self.alpha *  torch.sum(1 + torch.log(torch.abs(std_p/(std+1e-12))) - (mu_p - mu).pow(2)/(std+1e-12) - std_p/(std+1e-12), dim=1)/mu.shape[1]
+        #KLD_f = -0.5 * torch.sum(1 + torch.log(torch.abs(std_p/(std+1e-12))) - (mu_p - mu).pow(2)/(std+1e-12) - std_p/(std+1e-12), dim=1)
+        KLD_f = -0.5 * torch.sum(1 + torch.log(torch.abs(std_p)+1e-8) - torch.log(torch.abs((std)+1e-8)) - (mu_p - mu).pow(2)*(std+1e-8)**-1 - std_p*(std+1e-8)**-1, dim=1)
         KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp(), dim=-1)
         C_factor = min(epoch / (self.warmup_epoch + 1), 1)
-        KLD_diff = (1 - self.alpha) * torch.abs(KLD - self.C * C_factor)
 
+        KLD_diff = torch.abs(KLD - self.C * C_factor)
+        KLD_f_diff = torch.abs(KLD_f - self.C * C_factor)
 
         return (
-            ((mu.shape[1] - self.alpha)/mu.shape[1] * recon_loss + self.beta * KLD_diff + KLD_f).mean(dim=0),
+            ((mu.shape[1] - self.alpha)/mu.shape[1] * recon_loss + (1 - self.alpha) * self.beta * KLD_diff + self.alpha/mu.shape[1] * KLD_f_diff).mean(dim=0),
             recon_loss.mean(dim=0),
             KLD.mean(dim=0),
             KLD_f.mean(dim=0)
         )
 
+
+
     def _sample_gauss(self, mu, std):
         # Reparametrization trick
-        # Sample N(0, I)
         eps = torch.randn_like(std)
         return mu + eps * std, eps
 
-    def update(self, idx_to_remove):
-        n = self.encoder.weights_embedding.shape[0]
-        idxs_ = np.arange(n)
-        idxs = np.delete(idxs_, idx_to_remove)
-        print('updating architecture')
-        with torch.no_grad():
-            self.encoder.weights_embedding = torch.nn.Parameter(self.encoder.weights_embedding[idxs, :])
-            self.encoder.weights_log_var = torch.nn.Parameter(self.encoder.weights_log_var[idxs, :])
-            self.encoder.bias_embedding = torch.nn.Parameter(self.encoder.bias_embedding[idxs])
-            self.encoder.bias_log_var = torch.nn.Parameter(self.encoder.bias_log_var[idxs])
-            self.decoder.layers[0][0].weight = torch.nn.Parameter(self.decoder.layers[0][0].weight.data[:, idxs])
-            self.decoder.layers[0][0].in_channels = n - 1
-            self.decoder.pos_embedding.channels_map.weight = torch.nn.Parameter(self.decoder.pos_embedding.channels_map.weight.data[idxs])
-            self.decoder.pos_embedding.channels_map.bias = torch.nn.Parameter(self.decoder.pos_embedding.channels_map.bias.data[idxs])
-            self.decoder.pos_embedding.channels_map.out_channels = n - 1
-
-  
+    
