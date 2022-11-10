@@ -38,6 +38,9 @@ python examples/scripts/training.py \
 --C=${C} \
 --alpha=${alpha} \
 --latent_dim=${latent_dim} \
+--name_exp=${ExpName} \
+--data_path=$DATA_PATH \
+--use_hpc \
 > logs/${ExpName}.out 2> logs/${ExpName}.err &
 
 

@@ -173,7 +173,7 @@ def main(args):
 
             
     if args.dataset == "3Dshapes": 
-
+        print(args.data_path)
         from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
         from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
         dataset = h5py.File(args.data_path+'3dshapes.h5', 'r')
