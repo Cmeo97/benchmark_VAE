@@ -4,6 +4,8 @@ examples/data/*
 examples/scripts/data/
 tmp
 examples/scripts/tmp
+train.sh
+Jobs_master.sh
 examples/scripts/reproducibility/
 reproducibility/
 codecov*
