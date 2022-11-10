@@ -135,6 +135,8 @@ class FactorVAE(VAE):
             recon_x=recon_x,
             z=z,
             z_bis_permuted=z_bis_permuted,
+            mu=mu,
+            std=std,
         )
 
         return output
@@ -142,22 +144,11 @@ class FactorVAE(VAE):
     def loss_function(self, recon_x, x, mu, log_var, z, z_bis_permuted):
 
         N = z.shape[0]  # batch size
-
-        if self.model_config.reconstruction_loss == "mse":
-
-            recon_loss = F.mse_loss(
-                recon_x.reshape(x.shape[0], -1),
-                x.reshape(x.shape[0], -1),
-                reduction="none",
-            ).sum(dim=-1)
-
-        elif self.model_config.reconstruction_loss == "bce":
-
-            recon_loss = F.binary_cross_entropy(
-                recon_x.reshape(x.shape[0], -1),
-                x.reshape(x.shape[0], -1),
-                reduction="none",
-            ).sum(dim=-1)
+        recon_loss = F.mse_loss(
+             recon_x.reshape(x.shape[0], -1),
+             x.reshape(x.shape[0], -1),
+             reduction="none",
+        ).sum(dim=-1)
 
         KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp(), dim=-1)
 

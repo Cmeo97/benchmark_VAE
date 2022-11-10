@@ -22,3 +22,4 @@ class DisentangledBetaVAEConfig(VAEConfig):
     beta: float = 10.0
     C: float = 50.0
     warmup_epoch: int = 25
+    latent_dim: int = 10

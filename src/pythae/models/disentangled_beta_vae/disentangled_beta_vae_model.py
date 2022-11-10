@@ -77,8 +77,6 @@ class DisentangledBetaVAE(VAE):
         #if 'mask_idx' in kwargs.keys():
         #    self.store_parameters()
         #    self.apply_parameters_mask(kwargs['mask_idx'])    
-
-        #z = self.E_attention(mu, log_var)
         recon_x = self.decoder(z)["reconstruction"]
 
         loss, recon_loss, kld = self.loss_function(recon_x, x, mu, log_var, z, epoch)
@@ -92,19 +90,20 @@ class DisentangledBetaVAE(VAE):
             loss=loss,
             recon_x=recon_x,
             z=z,
+            mu=mu,
+            std=std,
         )
 
         return output
 
     def loss_function(self, recon_x, x, mu, log_var, z, epoch):
 
-        if self.model_config.reconstruction_loss == "mse":
 
-            recon_loss = F.mse_loss(
-                recon_x.reshape(x.shape[0], -1),
-                x.reshape(x.shape[0], -1),
-                reduction="none",
-            ).sum(dim=-1)
+        recon_loss = F.mse_loss(
+            recon_x.reshape(x.shape[0], -1),
+            x.reshape(x.shape[0], -1),
+            reduction="none",
+        ).sum(dim=-1)        
 
 
         KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp(), dim=-1)
@@ -182,23 +181,23 @@ class DisentangledBetaVAE(VAE):
        self.decoder.pos_embedding.channels_map.out_channels = self.stored_pos_embedding_channels_map_out_channels      
 
 
-    def E_attention(self, latent_mu: Tensor, latent_log_var: Tensor, eps=1e-8, latent_dim=10) -> Tensor:
-        b, n = latent_mu.shape
-        
-        mu = latent_mu.unsqueeze(1).expand(b, latent_dim, n) # [b, latent_dim, current dim ]
-        std =torch.exp(0.5* latent_log_var.unsqueeze(1).expand(b,  latent_dim, n))  #[b, latent_dim, current dim]
-        #latent = torch.normal(mu, sigma)   # reparametrization -> [b, latent_dim]
-      
-        z = mu + std * torch.randn_like(std) # #[b, latent_dim, current dim]
-  
-        dots = torch.einsum("bid,bjd->bij", latent_mu.unsqueeze(2), z) * latent_mu.shape[1]**-0.5
-        attn = dots.softmax(dim=1) + eps
-        attn = attn / attn.sum(dim=-1, keepdim=True)
-        latent = torch.einsum("bjd,bij->bid", latent_mu.unsqueeze(2), attn).squeeze(2)
-        #latent = self.gru(
-        #    updates.reshape(-1, self.dim), latent_prev.reshape(-1, self.dim)
-        #)
-        #latent = latent.reshape(b, -1, self.dim)
-        #latent = latent + self.mlp(self.norm_pre_ff(latent))
-
-        return latent
+    #def E_attention(self, latent_mu: Tensor, latent_log_var: Tensor, eps=1e-8, latent_dim=10) -> Tensor:
+    #    b, n = latent_mu.shape
+    #    
+    #    mu = latent_mu.unsqueeze(1).expand(b, latent_dim, n) # [b, latent_dim, current dim ]
+    #    std =torch.exp(0.5* latent_log_var.unsqueeze(1).expand(b,  latent_dim, n))  #[b, latent_dim, current dim]
+    #    #latent = torch.normal(mu, sigma)   # reparametrization -> [b, latent_dim]
+    #  
+    #    z = mu + std * torch.randn_like(std) # #[b, latent_dim, current dim]
+  #
+    #    dots = torch.einsum("bid,bjd->bij", latent_mu.unsqueeze(2), z) * latent_mu.shape[1]**-0.5
+    #    attn = dots.softmax(dim=1) + eps
+    #    attn = attn / attn.sum(dim=-1, keepdim=True)
+    #    latent = torch.einsum("bjd,bij->bid", latent_mu.unsqueeze(2), attn).squeeze(2)
+    #    #latent = self.gru(
+    #    #    updates.reshape(-1, self.dim), latent_prev.reshape(-1, self.dim)
+    #    #)
+    #    #latent = latent.reshape(b, -1, self.dim)
+    #    #latent = latent + self.mlp(self.norm_pre_ff(latent))
+#
+    #    return latent

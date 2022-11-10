@@ -58,8 +58,7 @@ class AdversarialTrainer(BaseTrainer):
         autoencoder_scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None,
         discriminator_scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None,
         callbacks: List[TrainingCallback] = None,
-        update_architecture: bool = None,
-        name_exp: str = None
+        kwargs=None, 
     ):
 
         BaseTrainer.__init__(
@@ -70,8 +69,7 @@ class AdversarialTrainer(BaseTrainer):
             training_config=training_config,
             optimizer=None,
             callbacks=callbacks,
-            update_architecture=update_architecture,
-            name_exp=name_exp
+            kwargs=kwargs, 
         )
 
         # set autoencoder optimizer
@@ -258,16 +256,19 @@ class AdversarialTrainer(BaseTrainer):
             metrics["train_autoencoder_loss"] = logs['epoch_train_autoencoder_loss']
             metrics["train_discriminator_loss"] = logs['epoch_train_discriminator_loss']
 
+            if len(logs.keys()) > 5:
+                for i in range(len(logs.keys()) - 5): 
+                    metric_name = 'train_SEPIN_'+str(i)
+                    metrics[metric_name] = logs[metric_name]
+
             if self.eval_dataset is not None:
                 epoch_eval_loss, logs = self.eval_step(epoch)
-
                 metrics["eval_epoch_loss"] = epoch_eval_loss
                 metrics["eval_autoencoder_loss"] = logs['epoch_eval_autoencoder_loss']
                 metrics["eval_discriminator_loss"] = logs['epoch_eval_autoencoder_loss']
                 metrics["eval_mse"] = logs['eval_mse']
                 metrics["eval_kl"] = logs['eval_kl']
                 metrics["eval_cvib"] = logs['eval_cvib']
-
                 self._schedulers_step(
                     autoencoder_metrics=logs['epoch_eval_autoencoder_loss'],
                     discriminator_metrics=logs['epoch_eval_autoencoder_loss'],
@@ -302,13 +303,14 @@ class AdversarialTrainer(BaseTrainer):
                 and epoch % self.training_config.steps_predict == 0
             ):
 
-                true_data, reconstructions, generations = self.predict(best_model)
+                true_data, reconstructions, generations, traversal = self.predict(best_model)
 
                 self.callback_handler.on_prediction_step(
                     self.training_config,
                     true_data=true_data,
                     reconstructions=reconstructions,
                     generations=generations,
+                    traversal=traversal,
                     global_step=epoch,
                 )
 
@@ -480,33 +482,35 @@ class AdversarialTrainer(BaseTrainer):
                 name_metric='train_SEPIN_'+str(i)
                 logs[name_metric] = normalized_SEPIN[i]
 
-            if min_SEPIN < 1e-5 and self.update_architecture:
-                perturbations = []
-                idxs = np.where(normalized_SEPIN<1e-5)
-                for idx in idxs[0]:
-                   model_output_ = self.model(
-                   inputs, epoch=epoch, dataset_size=len(self.train_loader.dataset), mask_idx=idx
-                   )
-                   perturbations.append(torch.abs(loss - model_output_.loss))
-                pb = torch.stack(perturbations).detach().cpu().numpy()
-                if np.min(pb) < 5:
-                    min_pb_idx = np.argmin(pb)
-                    update_idx = idxs[0][min_pb_idx]
-                    self.model.update(update_idx)
-                    self._best_model = deepcopy(self.model)
-                else:
-                    print('architecture could not be updated, minimum perturbation applied =', np.min(pb))
+            #if min_SEPIN < 1e-5 and self.update_architecture:
+            #    perturbations = []
+            #    idxs = np.where(normalized_SEPIN<1e-5)
+            #    for idx in idxs[0]:
+            #       model_output_ = self.model(
+            #       inputs, epoch=epoch, dataset_size=len(self.train_loader.dataset), mask_idx=idx
+            #       )
+            #       perturbations.append(torch.abs(loss - model_output_.loss))
+            #    pb = torch.stack(perturbations).detach().cpu().numpy()
+            #    if np.min(pb) < 5:
+            #        min_pb_idx = np.argmin(pb)
+            #        update_idx = idxs[0][min_pb_idx]
+            #        self.model.update(update_idx)
+            #        self._best_model = deepcopy(self.model)
+            #    else:
+            #        print('architecture could not be updated, minimum perturbation applied =', np.min(pb))
 
 
         epoch_loss /= len(self.train_loader)
         mse /= len(self.train_loader)
         kl /= len(self.train_loader)
         cvib /= len(self.train_loader)
+        epoch_autoencoder_loss /= len(self.train_loader)
+        epoch_discriminator_loss /= len(self.train_loader)
 
         logs['train_mse'] = mse
         logs['train_kl'] = kl
         logs['train_cvib'] = cvib
-        logs['epoch_train_autoencoder_loss'] = epoch_autoencoder_loss 
+        logs['epoch_train_autoencoder_loss'] =   epoch_autoencoder_loss 
         logs['epoch_train_discriminator_loss'] = epoch_discriminator_loss
 
         return epoch_loss, logs

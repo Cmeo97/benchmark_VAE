@@ -33,7 +33,7 @@ class TCVAE(VAE):
         For high dimensional data we advice you to provide you own network architectures. With the
         provided MLP you may end up with a ``MemoryError``.
     """
-
+    
     def __init__(
         self,
         model_config: TCVAEConfig,
@@ -47,12 +47,12 @@ class TCVAE(VAE):
             model_config.warmup_epoch >= 0
         ), f"Provide a value of warmup epoch >= 0, got {model_config.warmup_epoch}"
 
-        self.model_name = "DisentangledBetaVAE"
+        self.model_name = "TCVAE"
         self.beta = model_config.beta
         self.C = model_config.C
         self.warmup_epoch = model_config.warmup_epoch
         self.alpha = model_config.alpha
-
+        self.eps = 1e-8
     def forward(self, inputs: BaseDataset, **kwargs):
         """
         The VAE model
@@ -76,15 +76,13 @@ class TCVAE(VAE):
         std = torch.exp(0.5 * log_var)
         z, eps = self._sample_gauss(mu, std)
 
-        mu_p = ((mu*(std+1e-8)**-1).sum(dim=1)*((1/(std+1e-8)).sum(dim=1))**-1).unsqueeze(1)
+        mu_p = ((mu*(std+self.eps)**-1).sum(dim=1)*((1/(std+self.eps)).sum(dim=1))**-1).unsqueeze(1)
 
-        std_p = (((std+1e-8)**-1).sum(dim=1)).unsqueeze(1)
+        std_p = (((std+self.eps)**-1).sum(dim=1)).unsqueeze(1)
 
         recon_x = self.decoder(z)["reconstruction"]
 
-        loss, recon_loss, kld, cvib = self.loss_function(recon_x, x, mu, log_var, std, mu_p, std_p, epoch)
-
-        
+        loss, recon_loss, kld, cvib, losses = self.loss_function(recon_x, x, mu, log_var, std, mu_p, std_p, epoch)
 
         output = ModelOutput(
             reconstruction_loss=recon_loss,
@@ -95,23 +93,21 @@ class TCVAE(VAE):
             z=z,
             mu=mu,
             std=std,
+            losses=losses,
         )
 
         return output
 
     def loss_function(self, recon_x, x, mu, log_var, std, mu_p, std_p, epoch):
 
-        if self.model_config.reconstruction_loss == "mse":
 
-            recon_loss = F.mse_loss(
-                recon_x.reshape(x.shape[0], -1),
-                x.reshape(x.shape[0], -1),
-                reduction="none",
-            ).sum(dim=-1)
+        recon_loss = F.mse_loss(
+            recon_x.reshape(x.shape[0], -1),
+            x.reshape(x.shape[0], -1),
+            reduction="none",
+        ).sum(dim=-1)
 
-  
-        #KLD_f = -0.5 * torch.sum(1 + torch.log(torch.abs(std_p/(std+1e-12))) - (mu_p - mu).pow(2)/(std+1e-12) - std_p/(std+1e-12), dim=1)
-        KLD_f = -0.5 * torch.sum(1 + torch.log(torch.abs(std_p)+1e-8) - torch.log(torch.abs((std)+1e-8)) - (mu_p - mu).pow(2)*(std+1e-8)**-1 - std_p*(std+1e-8)**-1, dim=1)
+        KLD_f = -0.5 * torch.sum(1 + torch.log(torch.abs(std_p)+self.eps) - torch.log(torch.abs((std)+self.eps)) - (mu_p - mu).pow(2)*(std+self.eps)**-1 - std_p*(std+self.eps)**-1, dim=1)
         KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp(), dim=-1)
         C_factor = min(epoch / (self.warmup_epoch + 1), 1)
 
@@ -122,7 +118,8 @@ class TCVAE(VAE):
             ((mu.shape[1] - self.alpha)/mu.shape[1] * recon_loss + (1 - self.alpha) * self.beta * KLD_diff + self.alpha/mu.shape[1] * KLD_f_diff).mean(dim=0),
             recon_loss.mean(dim=0),
             (1 - self.alpha) * self.beta * KLD.mean(dim=0),
-            self.alpha/mu.shape[1] * KLD_f.mean(dim=0)
+            self.alpha/mu.shape[1] * KLD_f.mean(dim=0),
+            (mu.shape[1] - self.alpha)/mu.shape[1] * recon_loss + (1 - self.alpha) * self.beta * KLD_diff + self.alpha/mu.shape[1] * KLD_f_diff,
         )
 
 
