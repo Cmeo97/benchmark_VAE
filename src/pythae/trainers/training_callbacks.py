@@ -445,20 +445,21 @@ class CometCallback(TrainingCallback):  # pragma: no cover
     def on_prediction_step(self, training_config: BaseTrainerConfig, **kwargs):
         global_step = kwargs.pop("global_step", None)
 
-        column_names = ["images_id", "truth", "reconstruction", "normal_generation"]
+        column_names = ["images_id", "truth", "reconstruction", "normal_generation", "traversal"]
 
         true_data = kwargs.pop("true_data", None)
         reconstructions = kwargs.pop("reconstructions", None)
         generations = kwargs.pop("generations", None)
-
+        traversal = kwargs.pop("traversal", None)
         experiment = self._comet_ml.get_global_experiment()
 
         if (
             true_data is not None
             and reconstructions is not None
             and generations is not None
+            and traversal is not None
         ):
-            for i in range(len(true_data)):
+            for i in range(int(len(true_data)/4)):
 
                 experiment.log_image(
                     np.moveaxis(true_data[i].cpu().detach().numpy(), 0, -1),
@@ -481,6 +482,15 @@ class CometCallback(TrainingCallback):  # pragma: no cover
                         255.0,
                     ),
                     name=f"{i}_normal_generation",
+                    step=global_step,
+                )
+                experiment.log_image(
+                    np.clip(
+                        np.moveaxis(traversal[str(i)].cpu().detach().numpy(), 0, -1),
+                        0,
+                        255.0,
+                    ),
+                    name=f"{i}_traversal",
                     step=global_step,
                 )
 

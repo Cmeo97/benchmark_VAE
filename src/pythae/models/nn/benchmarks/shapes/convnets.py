@@ -142,7 +142,7 @@ class Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
         self.input_dim = (3, 64, 64)
         self.latent_dim = args.latent_dim
         self.n_channels = 3
-
+        
         layers = nn.ModuleList()
 
         layers.append(
@@ -177,6 +177,7 @@ class Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
             nn.Sequential(
                 nn.Flatten(),
                 nn.Linear(in_features=1024, out_features=256),
+                nn.LayerNorm(normalized_shape=256, eps=0.001),
                 nn.ReLU(),
             )
         )
@@ -184,7 +185,7 @@ class Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
 
         self.layers = layers
         self.depth = len(layers)
-
+        
         self.weights_embedding = torch.nn.Parameter(torch.randn(self.latent_dim, 256))
         self.weights_log_var = torch.nn.Parameter(torch.randn(self.latent_dim, 256))
         self.bias_embedding = torch.nn.Parameter(torch.randn(self.latent_dim))
@@ -195,12 +196,12 @@ class Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
     def init_weights(self):
         for i in range(self.depth):
             if isinstance(self.layers[i][0], nn.Conv2d) or isinstance(self.layers[i][0], nn.Linear):
-                self.layers[i][0].weight.data.normal_(0, 0.01)
-                nn.init.constant_(self.layers[i][0].bias.data, 0.001)
-        self.weights_log_var.data.normal_(0, 0.01)
-        self.weights_embedding.data.normal_(0, 0.01)
-        nn.init.constant_(self.bias_embedding.data, 0.001)
-        nn.init.constant_(self.bias_log_var.data, 0.001)
+                nn.init.kaiming_normal_(self.layers[i][0].weight)
+                nn.init.constant_(self.layers[i][0].bias.data, 0.01)
+        nn.init.kaiming_normal_(self.weights_log_var)
+        nn.init.kaiming_normal_(self.weights_embedding)
+        nn.init.constant_(self.bias_embedding.data, 0.01)
+        nn.init.constant_(self.bias_log_var.data, 0.01)
        
         
 
@@ -322,11 +323,12 @@ class SBD_Conv_VAE_3DSHAPES(BaseDecoder):
         self.init_weights()
     
     def init_weights(self):
-        for i in range(self.depth):
-            if isinstance(self.layers[i][0], nn.Conv2d) or isinstance(self.layers[i][0], nn.Linear):
-                self.layers[i][0].weight.data.normal_(0, 0.01)
-                nn.init.constant_(self.layers[i][0].bias.data, 0.001)
-            
+        for i in range(self.depth-1):
+            if isinstance(self.layers[i][0], nn.Conv2d):
+                nn.init.kaiming_normal_(self.layers[i][0].weight)
+                nn.init.constant_(self.layers[i][0].bias.data, 0.01)
+        nn.init.xavier_normal_(self.layers[self.depth-1][0].weight)
+        nn.init.constant_(self.layers[self.depth-1][0].bias.data, 0.01)    
      
     def spatial_broadcast(self, z: Tensor) -> Tensor:
         z = z.unsqueeze(-1).unsqueeze(-1)

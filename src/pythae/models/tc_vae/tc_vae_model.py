@@ -93,6 +93,8 @@ class TCVAE(VAE):
             loss=loss,
             recon_x=recon_x,
             z=z,
+            mu=mu,
+            std=std,
         )
 
         return output
@@ -119,8 +121,8 @@ class TCVAE(VAE):
         return (
             ((mu.shape[1] - self.alpha)/mu.shape[1] * recon_loss + (1 - self.alpha) * self.beta * KLD_diff + self.alpha/mu.shape[1] * KLD_f_diff).mean(dim=0),
             recon_loss.mean(dim=0),
-            KLD.mean(dim=0),
-            KLD_f.mean(dim=0)
+            (1 - self.alpha) * self.beta * KLD.mean(dim=0),
+            self.alpha/mu.shape[1] * KLD_f.mean(dim=0)
         )
 
 

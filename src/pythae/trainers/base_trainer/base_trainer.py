@@ -5,6 +5,7 @@ from copy import deepcopy
 from typing import Any, Dict, List, Optional, Callable, Tuple, Union
 import numpy as np
 import torch
+from torchvision.utils import make_grid
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
@@ -80,21 +81,25 @@ class BaseTrainer:
             logger.info(
                 f"Created {training_config.output_dir} folder since did not exist.\n"
             )
-
+        self.update_architecture = kwargs['update_architecture']
         self.training_config = training_config
         self.name_exp = kwargs['name_exp']
+        self.use_hpc = kwargs['use_hpc']
 
         set_seed(self.training_config.seed)
-
-        self.get_freer_gpu()
-
-        self.update_architecture = kwargs['update_architecture']
-
-        device = (
-            "cuda:"+str(self.freer_device)
-            if torch.cuda.is_available() and not training_config.no_cuda
-            else "cpu"
-        )
+        if self.use_hpc:
+            device = (
+                "cuda"
+                if torch.cuda.is_available() and not training_config.no_cuda
+                else "cpu"
+            )
+        else:
+            self.get_freer_gpu()
+            device = (
+                "cuda:"+str(self.freer_device)
+                if torch.cuda.is_available() and not training_config.no_cuda
+                else "cpu"
+            )
         self.device = device
         # place model on device
         model = model.to(device)
@@ -418,13 +423,14 @@ class BaseTrainer:
                 self.training_config.steps_predict is not None
                 and epoch % self.training_config.steps_predict == 0
             ):
-                true_data, reconstructions, generations = self.predict(best_model)
+                true_data, reconstructions, generations, traversal = self.predict(best_model)
 
                 self.callback_handler.on_prediction_step(
                     self.training_config,
                     true_data=true_data,
                     reconstructions=reconstructions,
                     generations=generations,
+                    traversal=traversal,
                     global_step=epoch,
                 )
 
@@ -674,7 +680,28 @@ class BaseTrainer:
         model_out = model(inputs)
         reconstructions = model_out.recon_x.cpu().detach()
         z_enc = model_out.z
+        
         z = torch.randn_like(z_enc)
         normal_generation = model.decoder(z).reconstruction.detach().cpu()
 
-        return inputs["data"], reconstructions, normal_generation
+
+        mu = model_out.mu
+        std = model_out.std 
+        std_ = torch.randn_like(std) * std
+        z_traversal = mu + std_
+        delta = np.linspace(-20, 20, 11)
+        traversals = []
+        img_traversals = {}
+        for l in range(z_traversal.shape[0]):
+            for i in range(z_traversal.shape[1]):
+                for j in range(11):
+                    z_traversal[l, i] =  mu[l, i] + delta[j] * std_[l, i]
+                    traversal = model.decoder(z_traversal[l].unsqueeze(0)).reconstruction[0].detach()
+                    z_traversal[l, i] = mu[l, i] - delta[j] * std_[l, i]
+                    traversals.append(traversal)
+            np_imagegrid = make_grid(traversals, 11, z.shape[1]).detach()
+            img_traversals[str(l)] = np_imagegrid
+            traversals = []
+            
+      
+        return inputs["data"], reconstructions, normal_generation, img_traversals

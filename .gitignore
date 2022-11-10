@@ -9,6 +9,7 @@ reproducibility/
 codecov*
 nohup.out
 examples/scripts/nohup.out
+*.sh
 *.pdf
 *.png
 __pycache__

@@ -88,6 +88,11 @@ ap.add_argument(
     action="store_true",
 )
 ap.add_argument(
+    "--use_hpc",
+    help="whether using hpc or not",
+    action="store_true",
+)
+ap.add_argument(
     "--use_comet",
     help="whether to log the metrics in comet",
     action="store_true",
@@ -105,6 +110,21 @@ ap.add_argument(
     type=int,
     default=10,
 )
+
+ap.add_argument(
+    "--data_path",
+    help='dataset folder path ',
+    type=str,
+    default="/home/cristianmeo/Datasets",
+)
+
+ap.add_argument(
+    "--name_exp",
+    help='experiment_name',
+    type=str,
+    default=None,
+)
+
 
 ap.add_argument(
     "--C_factor",
@@ -135,7 +155,6 @@ ap.add_argument(
     choices=[True, False],
 )
 
-
 ap.add_argument(
     "--wandb_project",
     help="wandb project name",
@@ -157,7 +176,7 @@ def main(args):
 
         from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
         from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
-        dataset = h5py.File('/home/cristianmeo/Datasets/3dshapes.h5', 'r')
+        dataset = h5py.File(args.data_path+'3dshapes.h5', 'r')
         
         data =  shuffle(np.array(dataset['images']).transpose((0, 3, 1, 2))/ 255.0)
     
@@ -169,7 +188,7 @@ def main(args):
         from pythae.models.nn.benchmarks.dsprites import Encoder_Conv_VAE_DSPRITES as Encoder_VAE
         from pythae.models.nn.benchmarks.dsprites import SBD_Conv_VAE_DSPRITES as Decoder_VAE
         #from pythae.models.nn.benchmarks.dsprites import Decoder_Conv_VAE_DSPRITES as Decoder_VAE
-        dataset = h5py.File('/home/cristianmeo/Datasets/dsprites-dataset/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.hdf5', 'r')
+        dataset = h5py.File(args.data_path+'dsprites-dataset/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.hdf5', 'r')
         image_data =  np.expand_dims(np.array(dataset['imgs']), 1)
 
         train_data = image_data[:int(image_data.shape[0]*0.8)]
@@ -325,7 +344,10 @@ def main(args):
     logger.info(f"Training config: {training_config}\n")
 
     callbacks = []
-    name_exp = args.model_name+'-test-'+args.dataset+'-'+str(args.latent_dim)+'-'+str(args.update_architecture)+'-'+str(args.seed)
+    if args.name_exp is None:
+        name_exp = args.model_name+'-'+args.dataset+'-'+str(args.latent_dim)+'-'+str(args.C_factor)+'-'+str(args.alpha)+'-'+str(args.beta)+'-'+str(args.seed)
+    else:
+        name_exp = args.name_exp
     print(name_exp)
     if args.use_wandb:
         
@@ -366,6 +388,9 @@ def main(args):
     kwargs['latent_dim'] = args.latent_dim
     kwargs['update_architecture'] = args.update_architecture
     kwargs['name_exp'] = name_exp
+    if args.use_hpc:
+        kwargs['use_hpc'] = True
+
 
 
     pipeline = TrainingPipeline(training_config=training_config, model=model, kwargs=kwargs)

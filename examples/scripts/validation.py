@@ -738,7 +738,7 @@ def main(args):
     #    )
     #exp_name = 'DisentangledBetaVAE_training_2022-10-19_16-39-02'
     my_trained_vae = AutoModel.load_from_folder(
-        '/home/cristianmeo/benchmark_VAE/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+'/checkpoint_epoch_70'
+        '/home/cristianmeo/benchmark_VAE/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+'/final_model'
     )
         #my_sampler_config = MAFSamplerConfig(
         #n_made_blocks=2,
@@ -777,7 +777,7 @@ def main(args):
     gen_data = evaluation_pipeline.sample(
     num_samples=50,
     batch_size=10,
-    output_dir='/home/cristianmeo/benchmark_VAE/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+"/checkpoint_epoch_70",
+    output_dir='/home/cristianmeo/benchmark_VAE/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+"/final_model",
     return_gen=True
     )
     #print(metrics)

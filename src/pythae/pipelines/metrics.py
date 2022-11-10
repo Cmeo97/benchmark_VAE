@@ -187,7 +187,7 @@ class EvaluationPipeline(Pipeline):
 
 
         x_gen_list = []
-        latent_dim = 10 #self.model.decoder.layers[0][0].weight.data.shape[1]
+        latent_dim = self.model.encoder.latent_dim
         for i in range(full_batch_nbr):
             z = torch.randn(batch_size, latent_dim).to(self.device)
             x_gen = self.model.decoder(z)["reconstruction"].detach()
@@ -235,7 +235,7 @@ class EvaluationPipeline(Pipeline):
         z = mu + std * torch.randn_like(std)
 
         images = []
-        delta = np.linspace(-35, 35, 11)
+        delta = np.linspace(-25, 25, 11)
         for l in range(10):
             for i in range(z.shape[1]):
                 for j in range(11):
