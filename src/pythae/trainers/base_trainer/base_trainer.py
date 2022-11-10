@@ -84,7 +84,10 @@ class BaseTrainer:
         self.update_architecture = kwargs['update_architecture']
         self.training_config = training_config
         self.name_exp = kwargs['name_exp']
-        self.use_hpc = kwargs['use_hpc']
+        if kwargs['use_hpc'] is not None:
+            self.use_hpc = kwargs['use_hpc']
+        else:
+            self.use_hpc = False
 
         set_seed(self.training_config.seed)
         if self.use_hpc:
