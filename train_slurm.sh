@@ -1,5 +1,19 @@
 #!/bin/bash
 
+#SBATCH --account=research-eemcs-me
+#SBATCH --job-name=tc_vae
+#SBATCH --partition=gpu                       
+#SBATCH --cpus-per-task=6
+#SBATCH --gres=gpu
+#SBATCH --mem=120G     
+#SBATCH --ntasks=1                                
+#SBATCH --time=23:59:00
+#SBATCH -o /scratch/cristianmeo/output/tc-vae-%A_%a.out  
+#SBATCH -e /scratch/cristianmeo/output/tc-vae-%A_%a.err  
+
+module --quiet load miniconda3/4.12.0
+conda activate MARL
+
 dataset=$1
 model_name=$2
 update_architecture=$3
@@ -13,7 +27,7 @@ latent_dim=$8
 ExpName=${model_name}"_"${dataset}"_"${seed}"_"${update_architecture}"_"${beta}"_"${alpha}"_"${C}"_"${latent_dim}
 echo "doing experiment: ${ExpName}"
 
-nohup python examples/scripts/training.py \
+python examples/scripts/training.py \
 --dataset=${dataset} \
 --model_name=${model_name} \
 --model_config=/home/cristianmeo/benchmark_VAE/examples/scripts/configs/${dataset}/${model_name}_config.json \
