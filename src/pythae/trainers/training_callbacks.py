@@ -375,15 +375,7 @@ class CometCallback(TrainingCallback):  # pragma: no cover
         $ pip install comet_ml
     """
 
-    def __init__(self):
-        if not comet_is_available():
-            raise ModuleNotFoundError(
-                "`comet_ml` package must be installed. Run `pip install comet_ml`"
-            )
-
-        else:
-            import comet_ml
-
+    def __init__(self, comet_ml):
             self._comet_ml = comet_ml
 
     def setup(

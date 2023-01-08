@@ -269,16 +269,29 @@ class BaseTrainer:
     def _set_inputs_to_device(self, inputs: Dict[str, Any]):
 
         inputs_on_device = inputs
+        if self.use_hpc:
+            if self.device == "cuda":
+                cuda_inputs = dict.fromkeys(inputs)
 
-        if self.device == "cuda:"+str(self.freer_device):
-            cuda_inputs = dict.fromkeys(inputs)
+                for key in inputs.keys():
+                    if torch.is_tensor(inputs[key]):
+                        cuda_inputs[key] = inputs[key].to(self.device)
 
-            for key in inputs.keys():
-                if torch.is_tensor(inputs[key]):
-                    cuda_inputs[key] = inputs[key].to(self.device)
+                    else:
+                        cuda_inputs = inputs[key]
+        
+            inputs_on_device = cuda_inputs
+        else:
+            if self.device == "cuda:"+str(self.freer_device):
+                cuda_inputs = dict.fromkeys(inputs)
 
-                else:
-                    cuda_inputs = inputs[key]
+                for key in inputs.keys():
+                    if torch.is_tensor(inputs[key]):
+                        cuda_inputs[key] = inputs[key].to(self.device)
+
+                    else:
+                        cuda_inputs = inputs[key]
+        
             inputs_on_device = cuda_inputs
 
         return inputs_on_device
@@ -293,6 +306,8 @@ class BaseTrainer:
             self.optimizer.step()
         else: 
             self.debugger.tensorboard_log(self.model, model_output, self.optimizer, epoch, total_norm)
+            print("Gradient skip")
+            print("Total norm: ", total_norm)
     
         self.optimizer.zero_grad()
         

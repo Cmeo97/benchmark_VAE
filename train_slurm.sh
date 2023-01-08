@@ -41,6 +41,6 @@ python examples/scripts/training.py \
 --name_exp=${ExpName} \
 --data_path=$DATA_PATH \
 --use_hpc \
-> logs/${ExpName}.out 2> logs/${ExpName}.err &
+> logs/${ExpName}.out 2> logs/${ExpName}.err 
 
 

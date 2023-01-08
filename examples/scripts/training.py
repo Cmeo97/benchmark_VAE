@@ -1,3 +1,4 @@
+import comet_ml
 import argparse
 import importlib
 import logging
@@ -408,7 +409,7 @@ def main(args):
         # Create you callback
         from pythae.trainers.training_callbacks import CometCallback
 
-        comet_cb = CometCallback() # Build the callback 
+        comet_cb = CometCallback(comet_ml) # Build the callback 
 
         # SetUp the callback 
         comet_cb.setup(
