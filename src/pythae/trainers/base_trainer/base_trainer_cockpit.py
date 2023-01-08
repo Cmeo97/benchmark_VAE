@@ -25,7 +25,26 @@ from torch.optim.lr_scheduler import LambdaLR
 from cockpit import Cockpit, CockpitPlotter
 from cockpit.utils.configuration import configuration
 from backpack import extend
-
+from backpack.extensions import (
+    GGNMP,
+    HMP,
+    KFAC,
+    KFLR,
+    KFRA,
+    PCHMP,
+    BatchDiagGGNExact,
+    BatchDiagGGNMC,
+    BatchDiagHessian,
+    BatchGrad,
+    BatchL2Grad,
+    DiagGGNExact,
+    DiagGGNMC,
+    DiagHessian,
+    SqrtGGNExact,
+    SqrtGGNMC,
+    SumGradSquared,
+    Variance,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +306,7 @@ class BaseTrainer:
         self.optimizer.zero_grad()
         with self.cockpit(
         self.global_step,
+        BatchGrad(),
         info={
             "batch_size": self.batch_size,
             "individual_losses": losses,
@@ -296,8 +316,8 @@ class BaseTrainer:
         ):
             loss.backward(create_graph=self.cockpit.create_graph(self.global_step))
         self.optimizer.step()
-
-        self.plotter.plot(self.cockpit, show_plot=False, block=False, save_plot=True, savedir='logs/cockpit/', savename='cockpit_plot_epoch'+str(self.global_step)+'.png')
+        if self.global_step % 10 == 0:
+            self.plotter.plot(self.cockpit, show_plot=False, block=False, save_plot=True, savedir='logs/cockpit/', savename='cockpit_plot_epoch'+str(self.global_step)+'.png')
         
 
     def _schedulers_step(self, metrics=None):

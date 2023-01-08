@@ -22,6 +22,8 @@ from ..training_callbacks import (
 )
 from .base_training_config import BaseTrainerConfig
 from torch.optim.lr_scheduler import LambdaLR
+from pythae.debugger import Debugger
+
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +156,14 @@ class BaseTrainer:
         self.callback_handler.add_callback(ProgressBarCallback())
         self.callback_handler.add_callback(MetricConsolePrinterCallback())
 
+        self.clip_gradient_norm = False
+        self.gradient_clip_norm_value = 300.
+
+        # Whether or not to use gradient skipping. This is usually unnecessary when using gradient smoothing but it doesn't hurt to keep it for safety.
+        self.gradient_skip_flag = True
+        # Defines the threshold at which to skip the update. Also defined for nats/dim loss.
+        self.gradient_skip_threshold = 800.
+
     def get_train_dataloader(
         self, train_dataset: BaseDataset
     ) -> torch.utils.data.DataLoader:
@@ -168,6 +178,10 @@ class BaseTrainer:
         os.system('nvidia-smi -q -d Memory |grep -A4 GPU|grep Used >tmp')
         memory_available = [int(x.split()[2]) for x in open('tmp', 'r').readlines()]
         self.freer_device = np.argmin(memory_available)
+
+
+    
+  
 
     def get_eval_dataloader(
         self, eval_dataset: BaseDataset
@@ -189,13 +203,6 @@ class BaseTrainer:
     def set_default_scheduler(
         self, model: BaseAE, optimizer: torch.optim.Optimizer
     ) -> torch.optim.lr_scheduler:
-
-        #scheduler = LambdaLR(
-        #    optimizer,
-        #    lr_lambda=self.linear_warmup_exp_decay(
-        #        10, 0.5, 100
-        #    ),
-        #)
 
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, factor=0.5, patience=10, verbose=True
@@ -276,15 +283,55 @@ class BaseTrainer:
 
         return inputs_on_device
 
-    def _optimizers_step(self, model_output=None):
+    def _optimizers_step(self, model, model_output=None, epoch=None):
+        
         loss = model_output.loss
-
-        self.optimizer.zero_grad()
         loss.backward()
-        self.optimizer.step()
+        total_norm = self.gradient_clip(model)
+        skip, _ = self.gradient_skip(total_norm)
+        if not skip:
+            self.optimizer.step()
+        else: 
+            self.debugger.tensorboard_log(self.model, model_output, self.optimizer, epoch, total_norm)
+    
+        self.optimizer.zero_grad()
+        
 
        
-        
+    def _global_norm(self, model):
+        parameters = [p for p in model.parameters() if p.grad is not None and p.requires_grad]
+        if len(parameters) == 0:
+            total_norm = torch.tensor(0.0)
+        else:
+            device = parameters[0].grad.device
+            total_norm = torch.norm(torch.stack([torch.norm(p.grad.detach(), 2.0).to(device) for p in parameters]), 2.0)
+        return total_norm
+
+    def gradient_clip(self, model):
+        if self.clip_gradient_norm:
+            total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(),
+                                                        max_norm=self.gradient_clip_norm_value)
+        else:
+            total_norm = self._global_norm(model)
+       
+        return total_norm
+
+
+    def gradient_skip(self, global_norm):
+        if self.gradient_skip_flag:
+            if torch.any(torch.isnan(global_norm)) or global_norm >= self.gradient_skip_threshold:
+                skip = True
+                gradient_skip_counter_delta = 1.
+
+            else:
+                skip = False
+                gradient_skip_counter_delta = 0.
+
+        else:
+            skip = False
+            gradient_skip_counter_delta = 0.
+
+        return skip, gradient_skip_counter_delta
 
     def _schedulers_step(self, metrics=None):
         if isinstance(self.scheduler, ReduceLROnPlateau):
@@ -320,6 +367,7 @@ class BaseTrainer:
         )
         #training_dir = self.name_exp
         self.training_dir = training_dir
+        self.debugger = Debugger(self.training_dir)
 
         if not os.path.exists(training_dir):
             os.makedirs(training_dir)
@@ -383,7 +431,7 @@ class BaseTrainer:
 
             metrics = {}
 
-            epoch_train_loss, logs = self.train_step(epoch)
+            epoch_train_loss, logs, model_output = self.train_step(epoch)
             metrics["train_epoch_loss"] = epoch_train_loss
             metrics["train_mse"] = logs['train_mse']
             metrics["train_kl"] = logs['train_kl']
@@ -438,7 +486,7 @@ class BaseTrainer:
                 )
 
             self.callback_handler.on_epoch_end(training_config=self.training_config)
-
+            
             # save checkpoints
             if (
                 self.training_config.steps_saving is not None
@@ -448,6 +496,7 @@ class BaseTrainer:
                     model=self._best_model, dir_path=training_dir, epoch=epoch
                 )
                 logger.info(f"Saved checkpoint at epoch {epoch}\n")
+                self.debugger.tensorboard_log(self.model, model_output, self.optimizer, epoch, metrics, self._global_norm(self.model))
 
                 if log_verbose:
                     file_logger.info(f"Saved checkpoint at epoch {epoch}\n")
@@ -558,8 +607,7 @@ class BaseTrainer:
                 inputs, epoch=epoch, dataset_size=len(self.train_loader.dataset)
             )
 
-            self._optimizers_step(model_output)
-
+            self._optimizers_step(self.model, model_output, epoch)
             loss = model_output.loss
 
             epoch_loss += loss.item()
@@ -618,7 +666,7 @@ class BaseTrainer:
         logs['train_kl'] = kl
         logs['train_cvib'] = cvib
 
-        return epoch_loss, logs
+        return epoch_loss, logs, model_output
 
     def save_model(self, model: BaseAE, dir_path: str):
         """This method saves the final model along with the config files

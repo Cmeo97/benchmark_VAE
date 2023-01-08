@@ -10,9 +10,8 @@ from ..nn import BaseDecoder, BaseEncoder
 from ..vae import VAE
 from .tc_vae_config import TCVAEConfig
 
-
 class TCVAE(VAE):
-    r"""
+    """
     Disentangled :math:`\beta`-VAE model.
 
     Args:
@@ -53,6 +52,9 @@ class TCVAE(VAE):
         self.warmup_epoch = model_config.warmup_epoch
         self.alpha = model_config.alpha
         self.eps = 1e-8
+        loss = TC_Bound(self.beta, self.C, self.warmup_epoch, self.alpha)
+        self.loss = loss
+ 
     def forward(self, inputs: BaseDataset, **kwargs):
         """
         The VAE model
@@ -82,8 +84,8 @@ class TCVAE(VAE):
 
         recon_x = self.decoder(z)["reconstruction"]
 
-        loss, recon_loss, kld, cvib, losses = self.loss_function(recon_x, x, mu, log_var, std, mu_p, std_p, epoch)
-
+        loss, recon_loss, kld, cvib = self.loss(recon_x, x, mu, log_var, std, mu_p, std_p, epoch)
+                                                           
         output = ModelOutput(
             reconstruction_loss=recon_loss,
             reg_loss=kld,
@@ -92,13 +94,35 @@ class TCVAE(VAE):
             recon_x=recon_x,
             z=z,
             mu=mu,
-            std=std,
-            losses=losses,
+            std=std
         )
 
         return output
 
-    def loss_function(self, recon_x, x, mu, log_var, std, mu_p, std_p, epoch):
+
+    def _sample_gauss(self, mu, std):
+        # Reparametrization trick
+        eps = torch.randn_like(std)
+        return mu + eps * std, eps
+
+
+class TC_Bound(torch.nn.Module):
+    def __init__(
+        self,
+        beta,
+        C,
+        warmup_epoch,
+        alpha
+    ):
+        super(TC_Bound, self).__init__()
+   
+        self.beta = beta
+        self.C = C
+        self.warmup_epoch = warmup_epoch
+        self.alpha = alpha
+        self.eps = 1e-8
+    
+    def forward(self, recon_x, x, mu, log_var, std, mu_p, std_p, epoch):
 
 
         recon_loss = F.mse_loss(
@@ -110,23 +134,17 @@ class TCVAE(VAE):
         KLD_f = -0.5 * torch.sum(1 + torch.log(torch.abs(std_p)+self.eps) - torch.log(torch.abs((std)+self.eps)) - (mu_p - mu).pow(2)*(std+self.eps)**-1 - std_p*(std+self.eps)**-1, dim=1)
         KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp(), dim=-1)
         C_factor = min(epoch / (self.warmup_epoch + 1), 1)
-
         KLD_diff = torch.abs(KLD - self.C * C_factor)
-        KLD_f_diff = torch.abs(KLD_f - self.C * C_factor)
+        #KLD_f_diff = torch.abs(KLD_f - self.C * C_factor)
 
         return (
-            ((mu.shape[1] - self.alpha)/mu.shape[1] * recon_loss + (1 - self.alpha) * self.beta * KLD_diff + self.alpha/mu.shape[1] * KLD_f_diff).mean(dim=0),
+            ((mu.shape[1] - self.alpha)/mu.shape[1] * recon_loss + (1 - self.alpha) * self.beta * KLD_diff + self.alpha/mu.shape[1] * KLD_f).mean(dim=0),
             recon_loss.mean(dim=0),
             (1 - self.alpha) * self.beta * KLD.mean(dim=0),
             self.alpha/mu.shape[1] * KLD_f.mean(dim=0),
-            (mu.shape[1] - self.alpha)/mu.shape[1] * recon_loss + (1 - self.alpha) * self.beta * KLD_diff + self.alpha/mu.shape[1] * KLD_f_diff,
         )
 
-
-
-    def _sample_gauss(self, mu, std):
-        # Reparametrization trick
-        eps = torch.randn_like(std)
-        return mu + eps * std, eps
+    
+     
 
     

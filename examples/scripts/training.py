@@ -7,6 +7,7 @@ import numpy as np
 import torch
 from sklearn.utils import shuffle
 from pythae.data.preprocessors import DataProcessor
+from pythae.data.datasets import CelebADataset
 from pythae.models import RHVAE
 from pythae.models.rhvae import RHVAEConfig
 from pythae.pipelines import TrainingPipeline
@@ -15,6 +16,8 @@ from pythae.trainers import (
     CoupledOptimizerTrainerConfig,
     AdversarialTrainerConfig,
 )
+import matplotlib.pyplot as plt
+from torchvision import transforms, datasets
 
 logger = logging.getLogger(__name__)
 console = logging.StreamHandler()
@@ -29,7 +32,7 @@ ap.add_argument(
     "--dataset",
     type=str,
     default="mnist",
-    choices=["mnist", "cifar10", "celeba","dsprites", "3Dshapes"],
+    choices=["mnist", "cifar10", "celeba","dsprites", "3Dshapes", "colored-dsprites"],
     help="The data set to use to perform training. It must be located in the folder 'data' at the "
     "path 'data/datset_name/' and contain a 'train_data.npz' and a 'eval_data.npz' file with the "
     "data being under the key 'data'. The data must be in the range [0-255] and shaped with the "
@@ -194,10 +197,49 @@ def main(args):
         train_data = image_data[:int(image_data.shape[0]*0.8)]
         eval_data = image_data[int(image_data.shape[0]*0.8):]
 
+    if args.dataset == "colored-dsprites":
+
+        from pythae.models.nn.benchmarks.colored_dsprites import Encoder_Conv_VAE_CDSPRITES as Encoder_VAE
+        from pythae.models.nn.benchmarks.colored_dsprites import SBD_Conv_VAE_CDSPRITES as Decoder_VAE
+        #from pythae.models.nn.benchmarks.dsprites import Decoder_Conv_VAE_DSPRITES as Decoder_VAE
+        train_dataset = h5py.File(args.data_path+'dsprites_train_data.h5', 'r')
+        eval_dataset = h5py.File(args.data_path+'dsprites_test_data.h5', 'r')
+        print(train_dataset['data'])
+
+        train_data = shuffle(np.array(train_dataset['data']).reshape((train_dataset['data'].shape[0]*train_dataset['data'].shape[1], 32, 32, 3)).transpose((0, 3, 1, 2))/ 255.0) 
+        eval_data = shuffle(np.array(eval_dataset['data']).reshape((eval_dataset['data'].shape[0]*eval_dataset['data'].shape[1], 32, 32, 3)).transpose((0, 3, 1, 2))/ 255.0) 
+
+    if args.dataset == "celeba":
+
+        from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
+        from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
+        # Spatial size of training images, images are resized to this size.
+        image_size = 64
+        img_folder=args.data_path+'celeba/img_align_celeba'
+        # Transformations to be applied to each individual image sample
+        transform=transforms.Compose([
+            transforms.Resize(image_size),
+            transforms.CenterCrop(image_size),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                                  std=[0.5, 0.5, 0.5])
+        ])
+        # Load the dataset from file and apply transformations
+        data = CelebADataset(f'{img_folder}/img_align_celeba', transform)
+        train_data = np.zeros((162770, 3, 64, 64), float)
+        eval_data = np.zeros((182637 - 162770, 3, 64, 64), float)
+        for i in range(162770):
+            train_data[i] = data[i]
+        for j in range(182637 - 162770):
+            eval_data[j] = data[162770 + j]
+        print('data loading done!')
+        
+
+
 
     try:
         logger.info(f"\nLoading {args.dataset} data...\n")
-        if args.dataset != "dsprites" and args.dataset != "3Dshapes":
+        if args.dataset != "dsprites" and args.dataset != "3Dshapes" and args.dataset != "colored-dsprites" and args.dataset != "celeba":
             train_data = (
                 np.load(os.path.join(PATH, f"data/{args.dataset}", "train_data.npz"))[
                     "data"
@@ -205,7 +247,7 @@ def main(args):
                 / 255.0
             )
         print("train_data shape: ",train_data.shape )
-        if args.dataset != "dsprites" and args.dataset != "3Dshapes":
+        if args.dataset != "dsprites" and args.dataset != "3Dshapes" and args.dataset != "colored-dsprites" and args.dataset != "celeba":
             eval_data = (
                 np.load(os.path.join(PATH, f"data/{args.dataset}", "eval_data.npz"))["data"]
                 / 255.0

@@ -129,7 +129,7 @@ class Decoder_Conv_VAE_3DSHAPES(BaseDecoder):
 
 
 
-class Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
+class Encoder_Conv_VAE_CDSPRITES(BaseEncoder):
     """<
     A Convolutional encoder suited for 3DShapes and Variational Autoencoder-based
     models. """
@@ -139,7 +139,7 @@ class Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
     def __init__(self, args: BaseAEConfig):
         BaseEncoder.__init__(self)
 
-        self.input_dim = (3, 64, 64)
+        self.input_dim = (3, 32, 32)
         self.latent_dim = args.latent_dim
         self.n_channels = 3
         
@@ -168,20 +168,13 @@ class Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
 
         layers.append(
             nn.Sequential(
-                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=4, stride=2, padding=1),
-                nn.ReLU()
-            )
-        )
-
-        layers.append(
-            nn.Sequential(
                 nn.Flatten(),
                 nn.Linear(in_features=1024, out_features=256),
                 nn.ReLU(),
             )
         )
 
-     
+    
         self.embedding_layer = nn.Linear(in_features=256, out_features=self.latent_dim)
         
         self.log_var_layer = nn.Linear(in_features=256, out_features=self.latent_dim)
@@ -264,7 +257,7 @@ class Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
         return output
 
 
-class SBD_Conv_VAE_3DSHAPES(BaseDecoder):
+class SBD_Conv_VAE_CDSPRITES(BaseDecoder):
     """
     A Convolutional decoder suited for 3Dshapes and Autoencoder-based
     models. """
@@ -272,7 +265,7 @@ class SBD_Conv_VAE_3DSHAPES(BaseDecoder):
 
     def __init__(self, args: dict):
         BaseDecoder.__init__(self)
-        self.input_dim = (3, 64, 64)
+        self.input_dim = (3, 32, 32)
         self.latent_dim = args.latent_dim
         self.n_channels = self.input_dim[0]
         self.w_broadcast = self.input_dim[1]
@@ -389,202 +382,6 @@ class SBD_Conv_VAE_3DSHAPES(BaseDecoder):
 
         return output
 
-
-
-class SBD_masks_Conv_VAE_3DSHAPES(BaseDecoder):
-    """
-    A Convolutional decoder suited for DSPRITES and Autoencoder-based
-    models. """
-
-
-    def __init__(self, args: dict):
-        BaseDecoder.__init__(self)
-        self.input_dim = (3, 64, 64)
-        self.latent_dim = args.latent_dim
-        self.n_channels = self.input_dim[0]
-        self.w_broadcast = self.input_dim[1]
-        self.h_broadcast = self.input_dim[2]
-      
-
-        self.pos_embedding = PositionalEmbedding(self.input_dim[1], self.input_dim[2], 1)
-     
-        layers = nn.ModuleList()
-
-        layers.append(
-            nn.Sequential(
-                nn.Conv2d(in_channels=1, out_channels=64, kernel_size=3, stride=1, padding=1),
-                nn.ReLU(),
-            )
-        )
-
-        layers.append(
-            nn.Sequential(
-                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
-                nn.ReLU(),
-            )
-        )
-
-        layers.append(
-            nn.Sequential(
-                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
-                nn.ReLU(),
-            )
-        )
-
-        layers.append(
-            nn.Sequential(
-                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
-                nn.ReLU(),
-            )
-        )
-
-        layers.append(
-            nn.Sequential(
-                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
-                nn.ReLU(),
-            )
-        )
-
-        layers.append(
-            nn.Sequential(
-                nn.Conv2d(in_channels=64, out_channels=self.n_channels+1,  kernel_size=3, stride=1, padding=1),
-                nn.Sigmoid()
-            )
-        )
-
-        self.layers = layers
-        self.depth = len(layers)
-
-        self.init_weights()
-    
-    def init_weights(self):
-        for i in range(self.depth):
-            if isinstance(self.layers[i][0], nn.Conv2d) or isinstance(self.layers[i][0], nn.Linear):
-                self.layers[i][0].weight.data.normal_(0, 0.01)
-                nn.init.constant_(self.layers[i][0].bias.data, 0)
-            
-     
-    def spatial_broadcast(self, z: Tensor) -> Tensor:
-        z = z.unsqueeze(-1).unsqueeze(-1)
-        return z.repeat(1, 1, self.w_broadcast, self.h_broadcast)
-
-    def forward(self, z: torch.Tensor, output_layer_levels: List[int] = None):
-        """Forward method
-
-        Args:
-            output_layer_levels (List[int]): The levels of the layers where the outputs are
-                extracted. If None, the last layer's output is returned. Default: None.
-
-        Returns:
-            ModelOutput: An instance of ModelOutput containing the reconstruction of the latent code
-            under the key `reconstruction`. Optional: The outputs of the layers specified in
-            `output_layer_levels` arguments are available under the keys `reconstruction_layer_i`
-            where i is the layer's level.
-        """
-        output = ModelOutput()
-        bs = z.shape[0]
-        z = z.unsqueeze(2).flatten(0, 1)
-        z = self.spatial_broadcast(z)
-        z = self.pos_embedding(z)
-        max_depth = self.depth
-
-        if output_layer_levels is not None:
-
-            assert all(
-                self.depth >= levels > 0 or levels == -1
-                for levels in output_layer_levels
-            ), (
-                f"Cannot output layer deeper than depth ({self.depth})."
-                f"Got ({output_layer_levels})"
-            )
-
-            if -1 in output_layer_levels:
-                max_depth = self.depth
-            else:
-                max_depth = max(output_layer_levels)
-
-        out = z
-        
-        for i in range(max_depth):
-            out = self.layers[i](out)
-            #print(out.shape)
-
-            if output_layer_levels is not None:
-                if i + 1 in output_layer_levels:
-                    output[f"reconstruction_layer_{i+1}"] = out
-
-            if i + 1 == self.depth:
-                
-                images, masks = out[:, :3], out[:, -1:]
-                images = images.view(bs, self.latent_dim, 3, self.input_dim[1], self.input_dim[2])
-                masks = masks.view(bs, self.latent_dim, 1, self.input_dim[1], self.input_dim[2])
-                masks = masks.softmax(dim=1)
-                image_masked = images * masks
-                output["reconstruction"] = image_masked.sum(dim=1)
-
-        return output
-
-
-
-
-class InputAttentionModule(nn.Module):
-    def __init__(self, latent_dim, input_dim, dim, iters=3, eps=1e-8):
-       
-        super().__init__()
-        self.latent_dim = latent_dim
-        self.eps = eps
-        self.scale = dim**-0.5
-        self.iters = iters
-        self.latent_mu = nn.Parameter(torch.rand(1, 10, dim))
-        self.latent_log_sigma = nn.Parameter(torch.randn(1, 10, dim))
-        with torch.no_grad():
-            limit = sqrt(6.0 / (1 + dim))
-            torch.nn.init.uniform_(self.latent_mu, -limit, limit)
-            torch.nn.init.uniform_(self.latent_log_sigma, -limit, limit)
-        self.to_q = nn.Linear(dim, dim, bias=False)
-        self.to_k = nn.Linear(input_dim, dim, bias=False)
-        self.to_v = nn.Linear(input_dim, dim, bias=False)
-
-        hidden_dim = max(dim, latent_dim)
-
-        self.mlp = nn.Sequential(
-            nn.Linear(dim, hidden_dim),
-            nn.ReLU(inplace=True),
-            nn.Linear(hidden_dim, dim),
-        )
-        self.gru = nn.GRUCell(dim, dim)
-
-        self.norm_input = nn.LayerNorm(input_dim, eps=0.001)
-        self.norm_latent = nn.LayerNorm(dim, eps=0.001)
-        self.norm_pre_ff = nn.LayerNorm(dim, eps=0.001)
-        self.dim = dim
-
-    def forward(self, inputs: Tensor, latent_dim: Optional[int] = None) -> Tensor:
-        b, n, _ = inputs.shape
-        if latent_dim is None:
-            latent_dim = self.latent_dim
-
-        mu = self.latent_mu.expand(b, latent_dim, 2)
-        sigma = self.latent_log_sigma.expand(b, latent_dim, 2).exp()
-        latent = torch.normal(mu, sigma)
-
-        inputs = self.norm_input(inputs)
-        k, v = self.to_k(inputs), self.to_v(inputs)
-        for _ in range(self.iters):
-            latent_prev = latent
-            latent = self.norm_latent(latent)
-            q = self.to_q(latent)
-            dots = torch.einsum("bid,bjd->bij", q, k) * self.scale
-            attn = dots.softmax(dim=1) + self.eps
-            #attn = attn / attn.sum(dim=-1, keepdim=True)
-            updates = torch.einsum("bjd,bij->bid", v, attn)
-            latent = self.gru(
-                updates.reshape(-1, self.dim), latent_prev.reshape(-1, self.dim)
-            )
-            latent = latent.reshape(b, -1, self.dim)
-            latent = latent + self.mlp(self.norm_pre_ff(latent))
-
-        return latent
 
 
 class PositionalEmbedding(nn.Module):
