@@ -214,6 +214,12 @@ def main(args):
 
         from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
         from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
+        #from pythae.models.nn.benchmarks.celeba import Encoder_Conv_VAE_CELEBA as Encoder_VAE
+        #from pythae.models.nn.benchmarks.celeba import Decoder_Conv_AE_CELEBA as Decoder_VAE
+        # C=31 Enc and Dec of Celeba 
+        # C = 30 later, Enc of Celeba 
+        # C=32 Enc 3DShapes, Dec Celeba 
+
         # Spatial size of training images, images are resized to this size.
         image_size = 64
         img_folder=args.data_path+'celeba/img_align_celeba'

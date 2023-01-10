@@ -267,8 +267,23 @@ class Encoder_Conv_VAE_CELEBA(BaseEncoder):
         self.layers = layers
         self.depth = len(layers)
 
-        self.embedding = nn.Linear(1024 * 4 * 4, args.latent_dim)
-        self.log_var = nn.Linear(1024 * 4 * 4, args.latent_dim)
+        self.embedding_layer = nn.Linear(1024 * 4 * 4, args.latent_dim)
+        self.log_var_layer = nn.Linear(1024 * 4 * 4, args.latent_dim)
+
+        self.init_weights()
+    
+    def init_weights(self):
+        for i in range(self.depth):
+            if isinstance(self.layers[i][0], nn.Conv2d) or isinstance(self.layers[i][0], nn.Linear):
+                nn.init.kaiming_normal_(self.layers[i][0].weight)
+                nn.init.constant_(self.layers[i][0].bias.data, 0.01)
+            if isinstance(self.layers[i][1], nn.Linear):
+                nn.init.kaiming_normal_(self.layers[i][1].weight)
+                nn.init.constant_(self.layers[i][1].bias.data, 0.01)
+        nn.init.kaiming_normal_(self.embedding_layer.weight)
+        nn.init.kaiming_normal_(self.log_var_layer.weight)
+        nn.init.constant_(self.embedding_layer.bias.data, 0.01)
+        nn.init.constant_(self.log_var_layer.bias.data, 0.01)
 
     def forward(self, x: torch.Tensor, output_layer_levels: List[int] = None):
         """Forward method
@@ -313,8 +328,8 @@ class Encoder_Conv_VAE_CELEBA(BaseEncoder):
                     output[f"embedding_layer_{i+1}"] = out
 
             if i + 1 == self.depth:
-                output["embedding"] = self.embedding(out.reshape(x.shape[0], -1))
-                output["log_covariance"] = self.log_var(out.reshape(x.shape[0], -1))
+                output["embedding"] = self.embedding_layer(out.reshape(x.shape[0], -1))
+                output["log_covariance"] = self.log_var_layer(out.reshape(x.shape[0], -1))
 
         return output
 

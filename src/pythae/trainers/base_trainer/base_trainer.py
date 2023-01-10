@@ -23,7 +23,10 @@ from ..training_callbacks import (
 from .base_training_config import BaseTrainerConfig
 from torch.optim.lr_scheduler import LambdaLR
 from pythae.debugger import Debugger
-
+from tsne_torch import TorchTSNE as TSNE
+import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set()
 
 logger = logging.getLogger(__name__)
 
@@ -299,21 +302,27 @@ class BaseTrainer:
     def _optimizers_step(self, model, model_output=None, epoch=None):
         
         loss = model_output.loss
-        loss.backward()
+        
         if model_output.reg_loss > 1000: 
+            loss.backward()
             total_norm = self.gradient_clip(model)
             skip, _ = self.gradient_skip(total_norm)
 
             if not skip:
                 self.optimizer.step()
+                self.optimizer.zero_grad()
             else: 
                 self.debugger.tensorboard_log(self.model, model_output, self.optimizer, epoch, total_norm)
                 print("Gradient skip")
                 print("Total norm: ", total_norm)
+                self.optimizer.zero_grad()
+
         else:
+            self.optimizer.zero_grad()
+            loss.backward()
             self.optimizer.step()
     
-        self.optimizer.zero_grad()
+        
         
 
        
@@ -386,7 +395,7 @@ class BaseTrainer:
         )
         #training_dir = self.name_exp
         self.training_dir = training_dir
-        self.debugger = Debugger(self.training_dir)
+        self.debugger = Debugger(self.training_dir, self.train_dataset, self.device)
 
         if not os.path.exists(training_dir):
             os.makedirs(training_dir)
@@ -495,6 +504,8 @@ class BaseTrainer:
             ):
                 true_data, reconstructions, generations, traversal = self.predict(best_model)
 
+
+
                 self.callback_handler.on_prediction_step(
                     self.training_config,
                     true_data=true_data,
@@ -505,7 +516,9 @@ class BaseTrainer:
                 )
 
             self.callback_handler.on_epoch_end(training_config=self.training_config)
-            
+            #########################################################################################################################
+            #self.debugger.tensorboard_log(self.model, model_output, self.optimizer, epoch, self._global_norm(self.model), metrics)
+            #########################################################################################################################
             # save checkpoints
             if (
                 self.training_config.steps_saving is not None
@@ -515,10 +528,22 @@ class BaseTrainer:
                     model=self._best_model, dir_path=training_dir, epoch=epoch
                 )
                 logger.info(f"Saved checkpoint at epoch {epoch}\n")
-                self.debugger.tensorboard_log(self.model, model_output, self.optimizer, epoch, metrics, self._global_norm(self.model))
+                self.debugger.tensorboard_log(self.model, model_output, self.optimizer, epoch, self._global_norm(self.model), metrics)
 
                 if log_verbose:
                     file_logger.info(f"Saved checkpoint at epoch {epoch}\n")
+
+                ##########################################################################
+                # T-SNE plot
+                #plt.figure(figsize=(16,10))
+                #sns.scatterplot(
+                #x="pca-one", y="pca-two",
+                #hue="y",
+                #palette=sns.color_palette("hls", 10),
+                #data=df.loc[rndperm,:],
+                #legend="full",
+                #alpha=0.3
+                #)
 
             self.callback_handler.on_log(
                 self.training_config, metrics, logger=logger, global_step=epoch
@@ -713,28 +738,28 @@ class BaseTrainer:
             dir_path (str): The folder where the checkpoint should be saved
             epochs_signature (int): The epoch number"""
 
-        checkpoint_dir = os.path.join(dir_path, f"checkpoint_epoch_{epoch}")
+        self.checkpoint_dir = os.path.join(dir_path, f"checkpoint_epoch_{epoch}")
 
-        if not os.path.exists(checkpoint_dir):
-            os.makedirs(checkpoint_dir)
+        if not os.path.exists(self.checkpoint_dir):
+            os.makedirs(self.checkpoint_dir)
 
         # save optimizer
         torch.save(
             deepcopy(self.optimizer.state_dict()),
-            os.path.join(checkpoint_dir, "optimizer.pt"),
+            os.path.join(self.checkpoint_dir, "optimizer.pt"),
         )
 
         # save scheduler
         torch.save(
             deepcopy(self.scheduler.state_dict()),
-            os.path.join(checkpoint_dir, "scheduler.pt"),
+            os.path.join(self.checkpoint_dir, "scheduler.pt"),
         )
 
         # save model
-        model.save(checkpoint_dir)
+        model.save(self.checkpoint_dir)
 
         # save training config
-        self.training_config.save_json(checkpoint_dir, "training_config")
+        self.training_config.save_json(self.checkpoint_dir, "training_config")
 
     def predict(self, model: BaseAE):
 
@@ -751,6 +776,9 @@ class BaseTrainer:
         reconstructions = model_out.recon_x.cpu().detach()
         z_enc = model_out.z
         
+
+        #X_emb = TSNE(n_components=2, perplexity=30, n_iter=1000, verbose=True).fit_transform(z_enc)  # returns shape (n_samples, 2)
+
         z = torch.randn_like(z_enc)
         normal_generation = model.decoder(z).reconstruction.detach().cpu()
 
@@ -774,4 +802,4 @@ class BaseTrainer:
             traversals = []
             
       
-        return inputs["data"], reconstructions, normal_generation, img_traversals
+        return inputs["data"], reconstructions, normal_generation, img_traversals  # put X_emb instead of None for T-SNE axis 

@@ -179,6 +179,7 @@ class CallbackHandler:
     def on_prediction_step(self, training_config: BaseTrainerConfig, **kwargs):
         self.call_event("on_prediction_step", training_config, **kwargs)
 
+
     def call_event(self, event, training_config, **kwargs):
         for callback in self.callbacks:
             result = getattr(callback, event)(
@@ -485,6 +486,7 @@ class CometCallback(TrainingCallback):  # pragma: no cover
                     name=f"{i}_traversal",
                     step=global_step,
                 )
+ 
 
     def on_train_end(self, training_config: BaseTrainerConfig, **kwargs):
         experiment = self._comet_ml.config.get_global_experiment()

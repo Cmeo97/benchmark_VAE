@@ -202,6 +202,9 @@ class Encoder_Conv_VAE_3DSHAPES(BaseEncoder):
             if isinstance(self.layers[i][0], nn.Conv2d) or isinstance(self.layers[i][0], nn.Linear):
                 nn.init.kaiming_normal_(self.layers[i][0].weight)
                 nn.init.constant_(self.layers[i][0].bias.data, 0.01)
+            if isinstance(self.layers[i][1], nn.Linear):
+                nn.init.kaiming_normal_(self.layers[i][1].weight)
+                nn.init.constant_(self.layers[i][1].bias.data, 0.01)
         nn.init.kaiming_normal_(self.embedding_layer.weight)
         nn.init.kaiming_normal_(self.log_var_layer.weight)
         nn.init.constant_(self.embedding_layer.bias.data, 0.01)

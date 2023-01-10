@@ -1,10 +1,10 @@
 {
   "name": "BaseTrainerConfig",
-  "output_dir": "my_models_on_celeba",
-  "batch_size": 100,
+  "output_dir": "reproducibility/celeba",
+  "batch_size": 16,
   "num_epochs": 50,
-  "learning_rate": 0.001,
-  "steps_saving": null,
-  "steps_predict": 50,
+  "learning_rate": 0.0003,
+  "steps_saving": 10,
+  "steps_predict": 10,
   "no_cuda": false
 }

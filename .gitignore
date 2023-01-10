@@ -200,3 +200,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+my_models_on_celeba/disentangled_beta_vae_celeba_0_3_0_100_16/events.out.tfevents.1673358052.quechua1.3624320.0
+my_models_on_celeba/disentangled_beta_vae_celeba_0_3_0_100_64/events.out.tfevents.1673358110.quechua1.3641882.0
+my_models_on_celeba/disentangled_beta_vae_celeba_1_3_0_100_16/events.out.tfevents.1673358046.quechua1.3639879.0
+my_models_on_celeba/disentangled_beta_vae_celeba_1_3_0_100_64/events.out.tfevents.1673358121.quechua1.3647572.0
+my_models_on_celeba/disentangled_beta_vae_celeba_2_3_0_100_16/events.out.tfevents.1673357966.quechua1.3641625.0
+my_models_on_celeba/disentangled_beta_vae_celeba_2_3_0_100_64/events.out.tfevents.1673358022.quechua1.3647804.0
+tmp
