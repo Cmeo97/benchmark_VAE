@@ -160,6 +160,22 @@ ap.add_argument(
 )
 
 ap.add_argument(
+    "--enc_celeba",
+    help='encoder celeba',
+    type=bool,
+    default=False,
+    choices=[True, False],
+)
+
+ap.add_argument(
+    "--dec_celeba",
+    help='decoder celeba',
+    type=bool,
+    default=False,
+    choices=[True, False],
+)
+
+ap.add_argument(
     "--wandb_project",
     help="wandb project name",
     default="test-project",
@@ -211,14 +227,14 @@ def main(args):
         eval_data = shuffle(np.array(eval_dataset['data']).reshape((eval_dataset['data'].shape[0]*eval_dataset['data'].shape[1], 32, 32, 3)).transpose((0, 3, 1, 2))/ 255.0) 
 
     if args.dataset == "celeba":
-
-        from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
-        from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
-        #from pythae.models.nn.benchmarks.celeba import Encoder_Conv_VAE_CELEBA as Encoder_VAE
-        #from pythae.models.nn.benchmarks.celeba import Decoder_Conv_AE_CELEBA as Decoder_VAE
-        # C=31 Enc and Dec of Celeba 
-        # C = 30 later, Enc of Celeba 
-        # C=32 Enc 3DShapes, Dec Celeba 
+        if args.enc_celeba:
+            from pythae.models.nn.benchmarks.celeba import Encoder_Conv_VAE_CELEBA as Encoder_VAE
+        else:
+            from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
+        if args.dec_celeba:
+            from pythae.models.nn.benchmarks.celeba import Decoder_Conv_VAE_CELEBA as Decoder_VAE
+        else:
+            from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
 
         # Spatial size of training images, images are resized to this size.
         image_size = 64
@@ -227,9 +243,7 @@ def main(args):
         transform=transforms.Compose([
             transforms.Resize(image_size),
             transforms.CenterCrop(image_size),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5, 0.5, 0.5],
-                                  std=[0.5, 0.5, 0.5])
+            transforms.ToTensor()
         ])
         # Load the dataset from file and apply transformations
         data = CelebADataset(f'{img_folder}/img_align_celeba', transform)
@@ -241,33 +255,6 @@ def main(args):
             eval_data[j] = data[162770 + j]
         print('data loading done!')
         
-
-
-
-    try:
-        logger.info(f"\nLoading {args.dataset} data...\n")
-        if args.dataset != "dsprites" and args.dataset != "3Dshapes" and args.dataset != "colored-dsprites" and args.dataset != "celeba":
-            train_data = (
-                np.load(os.path.join(PATH, f"data/{args.dataset}", "train_data.npz"))[
-                    "data"
-                ]
-                / 255.0
-            )
-        print("train_data shape: ",train_data.shape )
-        if args.dataset != "dsprites" and args.dataset != "3Dshapes" and args.dataset != "colored-dsprites" and args.dataset != "celeba":
-            eval_data = (
-                np.load(os.path.join(PATH, f"data/{args.dataset}", "eval_data.npz"))["data"]
-                / 255.0
-            )
-        print("eval_data shape: ",eval_data.shape )
-    except Exception as e:
-        raise FileNotFoundError(
-            f"Unable to load the data from 'data/{args.dataset}' folder. Please check that both a "
-            "'train_data.npz' and 'eval_data.npz' are present in the folder.\n Data must be "
-            " under the key 'data', in the range [0-255] and shaped with channel in first "
-            "position\n"
-            f"Exception raised: {type(e)} with message: " + str(e)
-        ) from e
 
     logger.info("Successfully loaded data !\n")
     logger.info("------------------------------------------------------------")

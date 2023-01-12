@@ -312,7 +312,7 @@ class BaseTrainer:
                 self.optimizer.step()
                 self.optimizer.zero_grad()
             else: 
-                self.debugger.tensorboard_log(self.model, model_output, self.optimizer, epoch, total_norm)
+                #self.debugger.tensorboard_log(self.model, model_output, self.optimizer, epoch, total_norm)
                 print("Gradient skip")
                 print("Total norm: ", total_norm)
                 self.optimizer.zero_grad()
@@ -395,7 +395,7 @@ class BaseTrainer:
         )
         #training_dir = self.name_exp
         self.training_dir = training_dir
-        self.debugger = Debugger(self.training_dir, self.train_dataset, self.device)
+        #self.debugger = Debugger(self.training_dir, self.train_dataset, self.device)
 
         if not os.path.exists(training_dir):
             os.makedirs(training_dir)
@@ -528,7 +528,7 @@ class BaseTrainer:
                     model=self._best_model, dir_path=training_dir, epoch=epoch
                 )
                 logger.info(f"Saved checkpoint at epoch {epoch}\n")
-                self.debugger.tensorboard_log(self.model, model_output, self.optimizer, epoch, self._global_norm(self.model), metrics)
+                #self.debugger.tensorboard_log(self.model, model_output, self.optimizer, epoch, self._global_norm(self.model), metrics)
 
                 if log_verbose:
                     file_logger.info(f"Saved checkpoint at epoch {epoch}\n")
@@ -673,16 +673,18 @@ class BaseTrainer:
             evaluation_pipeline = EvaluationPipeline(
             model=self.model, device=self.device,
             eval_loader=self.eval_loader
-            )    
-            print('Disentanglement Metrics at epoch: ', epoch)
-            disentanglement_metrics, normalized_SEPIN = evaluation_pipeline.disentanglement_metrics()
-           
-            idx_min_SEPIN = np.argmin(normalized_SEPIN)
-            min_SEPIN = normalized_SEPIN[idx_min_SEPIN]
+            )   
 
-            for i in range(normalized_SEPIN.shape[0]):
-                name_metric='train_SEPIN_'+str(i)
-                logs[name_metric] = normalized_SEPIN[i]
+            if self.model.latent_dim < 20:    
+                print('Disentanglement Metrics at epoch: ', epoch)
+                disentanglement_metrics, normalized_SEPIN = evaluation_pipeline.disentanglement_metrics()
+
+                idx_min_SEPIN = np.argmin(normalized_SEPIN)
+                min_SEPIN = normalized_SEPIN[idx_min_SEPIN]
+
+                for i in range(normalized_SEPIN.shape[0]):
+                    name_metric='train_SEPIN_'+str(i)
+                    logs[name_metric] = normalized_SEPIN[i]
 
             #if min_SEPIN < 1e-5 and self.update_architecture:
             #    perturbations = []
