@@ -135,10 +135,10 @@ class TC_Bound(torch.nn.Module):
         KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp(), dim=-1)
         C_factor = min(epoch / (self.warmup_epoch + 1), 1)
         KLD_diff = torch.abs(KLD - self.C * C_factor)
-        #KLD_f_diff = torch.abs(KLD_f - self.C * C_factor)
+        KLD_f_diff = torch.abs(KLD_f - self.C * C_factor)
 
         return (
-            ((mu.shape[1] - self.alpha)/mu.shape[1] * recon_loss + (1 - self.alpha) * self.beta * KLD_diff + self.alpha/mu.shape[1] * KLD_f).mean(dim=0),
+            ((mu.shape[1] - self.alpha)/mu.shape[1] * recon_loss + (1 - self.alpha) * self.beta * KLD_diff + self.alpha/mu.shape[1] * KLD_f_diff).mean(dim=0),
             recon_loss.mean(dim=0),
             (1 - self.alpha) * self.beta * KLD.mean(dim=0),
             self.alpha/mu.shape[1] * KLD_f.mean(dim=0),

@@ -3,6 +3,7 @@ examples/data/cifar-10-batches-py/
 examples/data/*
 my_models_on_celeba/
 examples/scripts/data/
+mu_models_on_celeba/
 tmp
 examples/scripts/tmp
 examples/scripts/reproducibility/

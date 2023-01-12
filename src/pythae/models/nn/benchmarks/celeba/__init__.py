@@ -14,5 +14,6 @@ __all__ = [
     "Encoder_ResNet_SVAE_CELEBA",
     "Encoder_ResNet_VQVAE_CELEBA",
     "Decoder_ResNet_AE_CELEBA",
+    "Decoder_ResNet_VAE_CELEBA",
     "Decoder_ResNet_VQVAE_CELEBA",
 ]

@@ -19,6 +19,8 @@ from pythae.models import AutoModel
 from pythae.samplers import MAFSamplerConfig
 from pythae.pipelines.metrics import EvaluationPipeline
 import matplotlib.pyplot as plt
+from torchvision import transforms, datasets
+from pythae.data.datasets import CelebADataset
 
 logger = logging.getLogger(__name__)
 console = logging.StreamHandler()
@@ -75,6 +77,21 @@ ap.add_argument(
     help="path to model config file (expected json file)",
     default=None,
 )
+ap.add_argument(
+    "--enc_celeba",
+    help='encoder celeba',
+    type=bool,
+    default=False,
+    choices=[True, False],
+)
+
+ap.add_argument(
+    "--dec_celeba",
+    help='decoder celeba',
+    type=bool,
+    default=False,
+    choices=[True, False],
+)
 
 ap.add_argument(
     "--exp_name", 
@@ -98,6 +115,12 @@ ap.add_argument(
     "--use_wandb",
     help="whether to log the metrics in wandb",
     action="store_true",
+)
+ap.add_argument(
+    "--data_path",
+    help='dataset folder path ',
+    type=str,
+    default="/home/cristianmeo/Datasets/",
 )
 ap.add_argument(
     "--wandb_project",
@@ -159,25 +182,6 @@ def main(args):
             from pythae.models.nn.benchmarks.cifar import Encoder_ResNet_VQVAE_CIFAR as Encoder_VQVAE
             from pythae.models.nn.benchmarks.cifar import Decoder_ResNet_AE_CIFAR as Decoder_AE
             from pythae.models.nn.benchmarks.cifar import Decoder_ResNet_VQVAE_CIFAR as Decoder_VQVAE
-
-    elif args.dataset == "celeba":
-
-        if args.nn == "convnet":
-
-            from pythae.models.nn.benchmarks.celeba import Encoder_Conv_AE_CELEBA as Encoder_AE
-            from pythae.models.nn.benchmarks.celeba import Encoder_Conv_VAE_CELEBA as Encoder_VAE
-            from pythae.models.nn.benchmarks.celeba import Encoder_Conv_SVAE_CELEBA as Encoder_SVAE
-            from pythae.models.nn.benchmarks.celeba import Encoder_Conv_AE_CELEBA as Encoder_VQVAE
-            from pythae.models.nn.benchmarks.celeba import Decoder_Conv_AE_CELEBA as Decoder_AE
-            from pythae.models.nn.benchmarks.celeba import Decoder_Conv_AE_CELEBA as Decoder_VQVAE
-
-        elif args.nn == "resnet":
-            from pythae.models.nn.benchmarks.celeba import Encoder_ResNet_AE_CELEBA as Encoder_AE
-            from pythae.models.nn.benchmarks.celeba import Encoder_ResNet_VAE_CELEBA as Encoder_VAE
-            from pythae.models.nn.benchmarks.celeba import Encoder_ResNet_SVAE_CELEBA as Encoder_SVAE
-            from pythae.models.nn.benchmarks.celeba import Encoder_ResNet_VQVAE_CELEBA as Encoder_VQVAE
-            from pythae.models.nn.benchmarks.celeba import Decoder_ResNet_AE_CELEBA as Decoder_AE
-            from pythae.models.nn.benchmarks.celeba import Decoder_ResNet_VQVAE_CELEBA as Decoder_VQVAE
             
     if args.dataset == "3Dshapes": 
 
@@ -201,31 +205,41 @@ def main(args):
         train_data = image_data[:int(image_data.shape[0]*0.8)]
         eval_data = image_data[int(image_data.shape[0]*0.8):]
 
+    if args.dataset == "celeba":
 
-    try:
-        logger.info(f"\nLoading {args.dataset} data...\n")
-        if args.dataset != "dsprites" and args.dataset != "3Dshapes":
-            train_data = (
-                np.load(os.path.join(PATH, f"data/{args.dataset}", "train_data.npz"))[
-                    "data"
-                ]
-                / 255.0
-            )
-        print("train_data shape: ",train_data.shape )
-        if args.dataset != "dsprites" and args.dataset != "3Dshapes":
-            eval_data = (
-                np.load(os.path.join(PATH, f"data/{args.dataset}", "eval_data.npz"))["data"]
-                / 255.0
-            )
-        print("eval_data shape: ",eval_data.shape )
-    except Exception as e:
-        raise FileNotFoundError(
-            f"Unable to load the data from 'data/{args.dataset}' folder. Please check that both a "
-            "'train_data.npz' and 'eval_data.npz' are present in the folder.\n Data must be "
-            " under the key 'data', in the range [0-255] and shaped with channel in first "
-            "position\n"
-            f"Exception raised: {type(e)} with message: " + str(e)
-        ) from e
+        if args.enc_celeba:
+            from pythae.models.nn.benchmarks.celeba import Encoder_Conv_VAE_CELEBA as Encoder_VAE
+        else:
+            from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
+        if args.dec_celeba:
+            from pythae.models.nn.benchmarks.celeba import Decoder_Conv_VAE_CELEBA as Decoder_VAE
+        else:
+            from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
+        # C=31 Enc and Dec of Celeba 
+        # C=30 later, Enc of Celeba 
+        # C=32 Enc 3DShapes, Dec Celeba 
+
+        # Spatial size of training images, images are resized to this size.
+        image_size = 64
+        img_folder=args.data_path+'celeba/img_align_celeba'
+        # Transformations to be applied to each individual image sample
+        transform=transforms.Compose([
+            transforms.Resize(image_size),
+            transforms.CenterCrop(image_size),
+            transforms.ToTensor()
+        ])
+        # Load the dataset from file and apply transformations
+        data = CelebADataset(f'{img_folder}/img_align_celeba', transform)
+        train_data = np.zeros((162770, 3, 64, 64), float)
+        eval_data = np.zeros((182637 - 162770, 3, 64, 64), float)
+        for i in range(162770):
+            train_data[i] = data[i]
+        for j in range(182637 - 162770):
+            eval_data[j] = data[162770 + j]
+        print('data loading done!')
+
+
+    
 
     logger.info("Successfully loaded data !\n")
     logger.info("------------------------------------------------------------")
@@ -737,8 +751,12 @@ def main(args):
     #    return_gen=True
     #    )
     #exp_name = 'DisentangledBetaVAE_training_2022-10-19_16-39-02'
+    if args.data_path[0:5] == '/home':
+        directory = '/home'
+    else:
+        directory = '/users'
     my_trained_vae = AutoModel.load_from_folder(
-        '/home/cristianmeo/benchmark_VAE/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+'/final_model'
+        directory+'/cristianmeo/benchmark_VAE/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+'/final_model'
     )
         #my_sampler_config = MAFSamplerConfig(
         #n_made_blocks=2,
@@ -777,7 +795,7 @@ def main(args):
     gen_data = evaluation_pipeline.sample(
     num_samples=50,
     batch_size=10,
-    output_dir='/home/cristianmeo/benchmark_VAE/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+"/final_model",
+    output_dir=directory+'/cristianmeo/benchmark_VAE/reproducibility/'+str(args.dataset)+'/'+str(args.exp_name)+"/final_model",
     return_gen=True
     )
     #print(metrics)
