@@ -1,6 +1,7 @@
 examples/data/cifar-10-python.tar.gz
 examples/data/cifar-10-batches-py/
 examples/data/*
+my_models_on_celeba/
 examples/scripts/data/
 tmp
 examples/scripts/tmp
