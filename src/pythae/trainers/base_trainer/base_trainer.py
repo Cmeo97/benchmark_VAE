@@ -520,18 +520,18 @@ class BaseTrainer:
             #self.debugger.tensorboard_log(self.model, model_output, self.optimizer, epoch, self._global_norm(self.model), metrics)
             #########################################################################################################################
             # save checkpoints
-            if (
-                self.training_config.steps_saving is not None
-                and epoch % self.training_config.steps_saving == 0
-            ):
-                self.save_checkpoint(
-                    model=self._best_model, dir_path=training_dir, epoch=epoch
-                )
-                logger.info(f"Saved checkpoint at epoch {epoch}\n")
+            #if (
+                #self.training_config.steps_saving is not None
+                #and epoch % self.training_config.steps_saving == 0
+            #):
+                #self.save_checkpoint(
+                #    model=self._best_model, dir_path=training_dir, epoch=epoch
+                #)
+                #logger.info(f"Saved checkpoint at epoch {epoch}\n")
                 #self.debugger.tensorboard_log(self.model, model_output, self.optimizer, epoch, self._global_norm(self.model), metrics)
 
-                if log_verbose:
-                    file_logger.info(f"Saved checkpoint at epoch {epoch}\n")
+                #if log_verbose:
+                #    file_logger.info(f"Saved checkpoint at epoch {epoch}\n")
 
                 ##########################################################################
                 # T-SNE plot
