@@ -1,10 +1,10 @@
 {
   "name": "BaseTrainerConfig",
-  "output_dir": "my_models_on_cifar",
-  "batch_size": 100,
-  "num_epochs": 100,
-  "learning_rate": 1e-4,
-  "steps_saving": null,
-  "steps_predict": 100,
+  "output_dir": "reproducibility/cifar10",
+  "batch_size": 10,
+  "num_epochs": 50,
+  "learning_rate": 3e-3,
+  "steps_saving": 10,
+  "steps_predict": 10,
   "no_cuda": false
 }

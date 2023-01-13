@@ -1,3 +1,4 @@
+data/
 examples/data/cifar-10-python.tar.gz
 examples/data/cifar-10-batches-py/
 examples/data/*

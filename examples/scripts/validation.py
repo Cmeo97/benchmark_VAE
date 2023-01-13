@@ -165,23 +165,28 @@ def main(args):
         )
 
     elif args.dataset == "cifar10":
+       
+        from pythae.models.nn.benchmarks.cifar10 import Encoder_Conv_VAE_CIFAR10 as Encoder_VAE
 
-        if args.nn == "convnet":
+        if args.dec_celeba:
+            from pythae.models.nn.benchmarks.cifar10 import Decoder_Conv_VAE_CIFAR10 as Decoder_VAE
+        else:
+            from pythae.models.nn.benchmarks.cifar10 import SBD_Conv_VAE_CIFAR10 as Decoder_VAE
 
-            from pythae.models.nn.benchmarks.cifar import Encoder_Conv_AE_CIFAR as Encoder_AE
-            from pythae.models.nn.benchmarks.cifar import Encoder_Conv_VAE_CIFAR as Encoder_VAE
-            from pythae.models.nn.benchmarks.cifar import Encoder_Conv_SVAE_CIFAR as Encoder_SVAE
-            from pythae.models.nn.benchmarks.cifar import Encoder_Conv_AE_CIFAR as Encoder_VQVAE
-            from pythae.models.nn.benchmarks.cifar import Decoder_Conv_AE_CIFAR as Decoder_AE
-            from pythae.models.nn.benchmarks.cifar import Decoder_Conv_AE_CIFAR as Decoder_VQVAE
+        image_size=64
+        transform = transforms.Compose(
+            [transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+            transforms.Resize(image_size)])
 
-        elif args.nn == "resnet":
-            from pythae.models.nn.benchmarks.cifar import Encoder_ResNet_AE_CIFAR as Encoder_AE
-            from pythae.models.nn.benchmarks.cifar import Encoder_ResNet_VAE_CIFAR as Encoder_VAE
-            from pythae.models.nn.benchmarks.cifar import Encoder_ResNet_SVAE_CIFAR as Encoder_SVAE
-            from pythae.models.nn.benchmarks.cifar import Encoder_ResNet_VQVAE_CIFAR as Encoder_VQVAE
-            from pythae.models.nn.benchmarks.cifar import Decoder_ResNet_AE_CIFAR as Decoder_AE
-            from pythae.models.nn.benchmarks.cifar import Decoder_ResNet_VQVAE_CIFAR as Decoder_VQVAE
+        train_data = datasets.CIFAR10(root='./data', train=True,
+                                                download=True, transform=transform).data.transpose((0, 3, 1, 2))/255
+    
+
+        eval_data = datasets.CIFAR10(root='./data', train=False,
+                                               download=True, transform=transform).data.transpose((0, 3, 1, 2))/255
+       
+   
             
     if args.dataset == "3Dshapes": 
 

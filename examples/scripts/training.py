@@ -20,6 +20,7 @@ from pythae.trainers import (
 import matplotlib.pyplot as plt
 from torchvision import transforms, datasets
 
+
 logger = logging.getLogger(__name__)
 console = logging.StreamHandler()
 logger.addHandler(console)
@@ -254,6 +255,33 @@ def main(args):
         for j in range(182637 - 162770):
             eval_data[j] = data[162770 + j]
         print('data loading done!')
+
+    if args.dataset == "cifar10":
+
+       
+        from pythae.models.nn.benchmarks.cifar10 import Encoder_Conv_VAE_CIFAR10 as Encoder_VAE
+
+        if args.dec_celeba:
+            from pythae.models.nn.benchmarks.cifar10 import Decoder_Conv_VAE_CIFAR10 as Decoder_VAE
+        else:
+            from pythae.models.nn.benchmarks.cifar10 import SBD_Conv_VAE_CIFAR10 as Decoder_VAE
+
+        image_size=64
+        transform = transforms.Compose(
+            [transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+            transforms.Resize(image_size)])
+
+        train_data = datasets.CIFAR10(root='./data', train=True,
+                                                download=True, transform=transform).data.transpose((0, 3, 1, 2))/255
+    
+
+        eval_data = datasets.CIFAR10(root='./data', train=False,
+                                               download=True, transform=transform).data.transpose((0, 3, 1, 2))/255
+       
+
+        #classes = ('plane', 'car', 'bird', 'cat',
+        #           'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
         
 
     logger.info("Successfully loaded data !\n")
