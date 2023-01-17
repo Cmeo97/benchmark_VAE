@@ -331,10 +331,10 @@ class Encoder_Conv_VAE_CELEBA(BaseEncoder):
                 max_depth = max(output_layer_levels)
 
         out = x
-        print(out.shape)
+        #print(out.shape)
         for i in range(max_depth):
             out = self.layers[i](out)
-            print(out.shape)
+            #print(out.shape)
 
             if output_layer_levels is not None:
                 if i + 1 in output_layer_levels:

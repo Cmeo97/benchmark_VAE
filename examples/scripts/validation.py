@@ -35,7 +35,7 @@ ap.add_argument(
     "--dataset",
     type=str,
     default="mnist",
-    choices=["mnist", "cifar10", "celeba","dsprites", "3Dshapes"],
+    choices=["mnist", "cifar10", "celeba","dsprites", "3Dshapes", "teapots"],
     help="The data set to use to perform training. It must be located in the folder 'data' at the "
     "path 'data/datset_name/' and contain a 'train_data.npz' and a 'eval_data.npz' file with the "
     "data being under the key 'data'. The data must be in the range [0-255] and shaped with the "
@@ -69,6 +69,7 @@ ap.add_argument(
         "vae_iaf",
         "vae_lin_nf",
         "tc_vae",
+        "torus_vae",
     ],
     required=True,
 )

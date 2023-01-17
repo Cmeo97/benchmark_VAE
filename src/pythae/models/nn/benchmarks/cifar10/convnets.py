@@ -228,7 +228,7 @@ class Encoder_Conv_VAE_CIFAR10(BaseEncoder):
     def __init__(self, args: BaseAEConfig):
         BaseEncoder.__init__(self)
 
-        self.input_dim = (3, 64, 64)
+        self.input_dim = (3, 32, 32)
         self.latent_dim = args.latent_dim
         self.n_channels = 3
 

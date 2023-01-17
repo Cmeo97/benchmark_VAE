@@ -8,10 +8,15 @@ from typing import Any, Tuple
 from torchvision import transforms, datasets
 import os
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Subset
 from natsort import natsorted
 from PIL import Image
 import numpy as np 
+
+
+
+
+
 
 class DatasetOutput(OrderedDict):
     """Base DatasetOutput class fixing the output type from the dataset. This class is inspired from
@@ -99,3 +104,57 @@ class CelebADataset(Dataset):
       img = self.transform(img)
 
     return img
+
+class TeapotsDataset(Dataset):
+    """Face Landmarks dataset."""
+
+    def __init__(self, dir, transform=None):
+        """
+        Args:
+            dir (string): Directory containing the dSprites dataset
+            transform (callable, optional): Optional transform to be applied
+                on a sample.
+        """
+        self.dir = dir
+        self.filename = 'teapots.npz'
+        self.filepath = f'{self.dir}/{self.filename}'
+        dataset_zip = np.load(self.filepath, allow_pickle=True, encoding='bytes')
+
+        # print('Keys in the dataset:', dataset_zip.keys())
+        self.imgs = dataset_zip['images'] / 255.0
+        self.imgs = self.imgs.transpose(0, 3, 1, 2)
+        self.latents_values = dataset_zip['gts']
+
+        # print('Metadata: \n', self.metadata)
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.imgs)
+
+    def __getitem__(self, idx):
+        sample = self.imgs[idx].astype(np.float32)
+        # sample = sample.reshape(1, sample.shape[0], sample.shape[1])
+        if self.transform:
+            sample = self.transform(sample)
+        return sample #, self.latents_values[idx]
+
+
+def load_teapot(root, val_split=0.8, shuffle=True, seed=42):
+    # img_size = 64
+    path = os.path.join(root, 'teapots')
+    dataset = TeapotsDataset(path, transform=transforms.ToTensor())
+
+    # Create data indices for training and validation splits:
+    dataset_size = len(dataset)
+    indices = list(range(dataset_size))
+    split = int(np.floor(val_split * dataset_size))
+    if shuffle:
+        np.random.seed(seed)
+        np.random.shuffle(indices)
+    train_indices, val_indices = indices[:split], indices[split:]
+
+    # Create data samplers and loaders:
+    train_sampler = Subset(dataset, train_indices)
+    val_sampler = Subset(dataset, val_indices)
+
+    return train_sampler, val_sampler

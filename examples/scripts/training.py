@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from sklearn.utils import shuffle
 from pythae.data.preprocessors import DataProcessor
-from pythae.data.datasets import CelebADataset
+from pythae.data.datasets import CelebADataset, TeapotsDataset
 from pythae.models import RHVAE
 from pythae.models.rhvae import RHVAEConfig
 from pythae.pipelines import TrainingPipeline
@@ -34,7 +34,7 @@ ap.add_argument(
     "--dataset",
     type=str,
     default="mnist",
-    choices=["mnist", "cifar10", "celeba","dsprites", "3Dshapes", "colored-dsprites"],
+    choices=["mnist", "cifar10", "celeba","dsprites", "3Dshapes", "colored-dsprites", "teapots"],
     help="The data set to use to perform training. It must be located in the folder 'data' at the "
     "path 'data/datset_name/' and contain a 'train_data.npz' and a 'eval_data.npz' file with the "
     "data being under the key 'data'. The data must be in the range [0-255] and shaped with the "
@@ -68,6 +68,7 @@ ap.add_argument(
         "vae_iaf",
         "vae_lin_nf",
         "tc_vae",
+        "torus_vae",
     ],
     required=True,
 )
@@ -169,7 +170,7 @@ ap.add_argument(
 )
 
 ap.add_argument(
-    "--dec_celeba",
+    "--SBD",
     help='decoder celeba',
     type=bool,
     default=False,
@@ -192,7 +193,7 @@ args = ap.parse_args()
 
 def main(args):
 
-            
+    print(args)       
     if args.dataset == "3Dshapes": 
         print(args.data_path)
         from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
@@ -232,7 +233,7 @@ def main(args):
             from pythae.models.nn.benchmarks.celeba import Encoder_Conv_VAE_CELEBA as Encoder_VAE
         else:
             from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
-        if args.dec_celeba:
+        if args.SBD:
             from pythae.models.nn.benchmarks.celeba import Decoder_Conv_VAE_CELEBA as Decoder_VAE
         else:
             from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
@@ -256,12 +257,38 @@ def main(args):
             eval_data[j] = data[162770 + j]
         print('data loading done!')
 
+
+    if args.dataset == "teapots":
+       
+        from pythae.models.nn.benchmarks.teapots import Encoder_Conv_VAE_TEAPOTS as Encoder_VAE
+      
+        if args.SBD:   #It is the opposite: SBD false uses SBD, just to be consistent with previous notion
+            from pythae.models.nn.benchmarks.teapots import Decoder_Conv_VAE_TEAPOTS as Decoder_VAE
+        else:
+            from pythae.models.nn.benchmarks.teapots import SBD_Conv_VAE_TEAPOTS as Decoder_VAE
+        
+        
+      
+        # Spatial size of training images, images are resized to this size.
+       
+        img_folder=args.data_path+'teapots/'
+        
+        # Load the dataset from file and apply transformations
+        data = TeapotsDataset(f'{img_folder}')
+        train_data = np.zeros((160000, 3, 64, 64), float)
+        eval_data = np.zeros((40000, 3, 64, 64), float)
+        for i in range(160000):
+            train_data[i] = data[i]
+        for j in range(40000):
+            eval_data[j] = data[160000 + j]
+        print('data loading done!')
+
     if args.dataset == "cifar10":
 
        
         from pythae.models.nn.benchmarks.cifar10 import Encoder_Conv_VAE_CIFAR10 as Encoder_VAE
 
-        if args.dec_celeba:
+        if args.SBD:
             from pythae.models.nn.benchmarks.cifar10 import Decoder_Conv_VAE_CIFAR10 as Decoder_VAE
         else:
             from pythae.models.nn.benchmarks.cifar10 import SBD_Conv_VAE_CIFAR10 as Decoder_VAE
