@@ -1,3 +1,8 @@
+*.sh
+experiments_quechua/
+models/
+experiments/
+disentanglement_metrics/
 data/
 examples/data/cifar-10-python.tar.gz
 examples/data/cifar-10-batches-py/
@@ -64,7 +69,7 @@ mlruns/*
 examples/notebooks/data_folders/*
 
 examples/scripts/configs/*
-
+csv_results/
 examples/notebooks/mlruns/*
 mlruns/*
 examples/scripts/reproducibility/reproducibility/*

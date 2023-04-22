@@ -99,6 +99,50 @@ class TCVAE(VAE):
 
         return output
 
+    def test(self, inputs: BaseDataset, **kwargs):
+        """
+        The VAE model
+
+        Args:
+            inputs (BaseDataset): The training dataset with labels
+
+        Returns:
+            ModelOutput: An instance of ModelOutput containing all the relevant parameters
+
+        """
+
+        x = inputs["data"]
+
+        epoch = kwargs.pop("epoch", self.warmup_epoch)
+
+        encoder_output = self.encoder(x)
+
+        mu, log_var = encoder_output.embedding, encoder_output.log_covariance
+
+        std = torch.exp(0.5 * log_var)
+        z, eps = self._sample_gauss(mu, std)
+
+        mu_p = ((mu*(std+self.eps)**-1).sum(dim=1)*((1/(std+self.eps)).sum(dim=1))**-1).unsqueeze(1)
+
+        std_p = (((std+self.eps)**-1).sum(dim=1)).unsqueeze(1)
+
+        recon_x = self.decoder(mu)["reconstruction"]
+
+        loss, recon_loss, kld, cvib = self.loss(recon_x, x, mu, log_var, std, mu_p, std_p, epoch)
+                                                           
+        output = ModelOutput(
+            reconstruction_loss=recon_loss,
+            reg_loss=kld,
+            cvib_loss=cvib,
+            loss=loss,
+            recon_x=recon_x,
+            z=z,
+            mu=mu,
+            std=std
+        )
+
+        return output
+
 
     def _sample_gauss(self, mu, std):
         # Reparametrization trick

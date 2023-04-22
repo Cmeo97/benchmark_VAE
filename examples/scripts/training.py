@@ -1,25 +1,16 @@
 import comet_ml
 import argparse
-import importlib
 import logging
 import os
-import h5py
-import numpy as np
-import torch
-from sklearn.utils import shuffle
-from pythae.data.preprocessors import DataProcessor
-from pythae.data.datasets import CelebADataset, TeapotsDataset
-from pythae.models import RHVAE
-from pythae.models.rhvae import RHVAEConfig
 from pythae.pipelines import TrainingPipeline
 from pythae.trainers import (
     BaseTrainerConfig,
-    CoupledOptimizerTrainerConfig,
     AdversarialTrainerConfig,
 )
-import matplotlib.pyplot as plt
 from torchvision import transforms, datasets
-
+from pythae.data.shapes3d import Shapes3D
+from pythae.data.teapots import Teapots
+from pythae.data.celeba import Celeba
 
 logger = logging.getLogger(__name__)
 console = logging.StreamHandler()
@@ -45,30 +36,10 @@ ap.add_argument(
     "--model_name",
     help="The name of the model to train",
     choices=[
-        "ae",
-        "vae",
-        "beta_vae",
-        "iwae",
-        "wae",
-        "info_vae",
-        "rae_gp",
-        "rae_l2",
-        "vamp",
-        "hvae",
-        "rhvae",
-        "aae",
-        "vaegan",
-        "vqvae",
-        "msssim_vae",
-        "svae",
         "disentangled_beta_vae",
         "factor_vae",
         "beta_tc_vae",
-        "vae_nf",
-        "vae_iaf",
-        "vae_lin_nf",
         "tc_vae",
-        "torus_vae",
     ],
     required=True,
 )
@@ -109,50 +80,48 @@ ap.add_argument(
     type=int,
     default=0,
 )
-
 ap.add_argument(
     "--latent_dim",
     help='latent dimensions ',
     type=int,
     default=10,
 )
-
 ap.add_argument(
     "--data_path",
     help='dataset folder path ',
     type=str,
     default="/home/cristianmeo/Datasets/",
 )
-
 ap.add_argument(
     "--name_exp",
     help='experiment_name',
     type=str,
     default=None,
 )
-
-
 ap.add_argument(
     "--C_factor",
     help='capacity factor',
     type=float,
     default=30,
 )
-
 ap.add_argument(
     "--alpha",
     help='bound balance',
     type=float,
     default=0.5,
 )
-
 ap.add_argument(
     "--beta",
     help='beta of VIB',
     type=float,
     default=1,
 )
-
+ap.add_argument(
+    "--imbalance_percentage",
+    help='percentage of samples to be removed for a given factor of variation',
+    type=float,
+    default=0,
+)
 ap.add_argument(
     "--update_architecture",
     help='architecture dynamic update',
@@ -160,7 +129,6 @@ ap.add_argument(
     default=False,
     choices=[True, False],
 )
-
 ap.add_argument(
     "--enc_celeba",
     help='encoder celeba',
@@ -168,7 +136,6 @@ ap.add_argument(
     default=False,
     choices=[True, False],
 )
-
 ap.add_argument(
     "--SBD",
     help='decoder celeba',
@@ -176,7 +143,6 @@ ap.add_argument(
     default=False,
     choices=[True, False],
 )
-
 ap.add_argument(
     "--wandb_project",
     help="wandb project name",
@@ -187,7 +153,6 @@ ap.add_argument(
     help="wandb entity name",
     default="benchmark_team",
 )
-
 args = ap.parse_args()
 
 
@@ -195,44 +160,19 @@ def main(args):
 
     print(args)       
     if args.dataset == "3Dshapes": 
-        print(args.data_path)
         from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
         from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
-        dataset = h5py.File(args.data_path+'3dshapes.h5', 'r')
-        
-        data =  shuffle(np.array(dataset['images']).transpose((0, 3, 1, 2))/ 255.0)
-    
-        train_data = data[:int(data.shape[0]*0.8)]
-        eval_data = data[int(data.shape[0]*0.8):]
 
-    if args.dataset == "dsprites":
-
-        from pythae.models.nn.benchmarks.dsprites import Encoder_Conv_VAE_DSPRITES as Encoder_VAE
-        from pythae.models.nn.benchmarks.dsprites import SBD_Conv_VAE_DSPRITES as Decoder_VAE
-        #from pythae.models.nn.benchmarks.dsprites import Decoder_Conv_VAE_DSPRITES as Decoder_VAE
-        dataset = h5py.File(args.data_path+'dsprites-dataset/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.hdf5', 'r')
-        image_data =  np.expand_dims(np.array(dataset['imgs']), 1)
-
-        train_data = image_data[:int(image_data.shape[0]*0.8)]
-        eval_data = image_data[int(image_data.shape[0]*0.8):]
-
-    if args.dataset == "colored-dsprites":
-
-        from pythae.models.nn.benchmarks.colored_dsprites import Encoder_Conv_VAE_CDSPRITES as Encoder_VAE
-        from pythae.models.nn.benchmarks.colored_dsprites import SBD_Conv_VAE_CDSPRITES as Decoder_VAE
-        #from pythae.models.nn.benchmarks.dsprites import Decoder_Conv_VAE_DSPRITES as Decoder_VAE
-        train_dataset = h5py.File(args.data_path+'dsprites_train_data.h5', 'r')
-        eval_dataset = h5py.File(args.data_path+'dsprites_test_data.h5', 'r')
-        print(train_dataset['data'])
-
-        train_data = shuffle(np.array(train_dataset['data']).reshape((train_dataset['data'].shape[0]*train_dataset['data'].shape[1], 32, 32, 3)).transpose((0, 3, 1, 2))/ 255.0) 
-        eval_data = shuffle(np.array(eval_dataset['data']).reshape((eval_dataset['data'].shape[0]*eval_dataset['data'].shape[1], 32, 32, 3)).transpose((0, 3, 1, 2))/ 255.0) 
-
+        Shapes3D_PATH='/home/cristianmeo/Datasets/3dshapes.h5'
+        data = Shapes3D(Shapes3D_PATH)
+        data_n_split = int(data.images.shape[0]*0.8)
+        train_data = data.images[:data_n_split]
+        eval_data = data.images[data_n_split:]
+       
     if args.dataset == "celeba":
-        if args.enc_celeba:
-            from pythae.models.nn.benchmarks.celeba import Encoder_Conv_VAE_CELEBA as Encoder_VAE
-        else:
-            from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
+      
+        from pythae.models.nn.benchmarks.celeba import Encoder_Conv_VAE_CELEBA as Encoder_VAE
+      
         if args.SBD:
             from pythae.models.nn.benchmarks.celeba import Decoder_Conv_VAE_CELEBA as Decoder_VAE
         else:
@@ -240,7 +180,7 @@ def main(args):
 
         # Spatial size of training images, images are resized to this size.
         image_size = 64
-        img_folder=args.data_path+'celeba/img_align_celeba'
+        Celeba_PATH=args.data_path+'celeba/img_align_celeba'
         # Transformations to be applied to each individual image sample
         transform=transforms.Compose([
             transforms.Resize(image_size),
@@ -248,46 +188,27 @@ def main(args):
             transforms.ToTensor()
         ])
         # Load the dataset from file and apply transformations
-        data = CelebADataset(f'{img_folder}/img_align_celeba', transform)
-        train_data = np.zeros((162770, 3, 64, 64), float)
-        eval_data = np.zeros((182637 - 162770, 3, 64, 64), float)
-        for i in range(162770):
-            train_data[i] = data[i]
-        for j in range(182637 - 162770):
-            eval_data[j] = data[162770 + j]
-        print('data loading done!')
-
-
-    if args.dataset == "teapots":
+        data = Celeba(Celeba_PATH, transform)
+        data_n_split = int(data.images.shape[0]*0.8)
+        train_data = data.images[:data_n_split]
+        eval_data = data.images[data_n_split:]
        
+    if args.dataset == "teapots":
+
         from pythae.models.nn.benchmarks.teapots import Encoder_Conv_VAE_TEAPOTS as Encoder_VAE
-      
         if args.SBD:   #It is the opposite: SBD false uses SBD, just to be consistent with previous notion
             from pythae.models.nn.benchmarks.teapots import Decoder_Conv_VAE_TEAPOTS as Decoder_VAE
         else:
             from pythae.models.nn.benchmarks.teapots import SBD_Conv_VAE_TEAPOTS as Decoder_VAE
         
-        
-      
-        # Spatial size of training images, images are resized to this size.
-       
-        img_folder=args.data_path+'teapots/'
-        
-        # Load the dataset from file and apply transformations
-        data = TeapotsDataset(f'{img_folder}')
-        train_data = np.zeros((160000, 3, 64, 64), float)
-        eval_data = np.zeros((40000, 3, 64, 64), float)
-        for i in range(160000):
-            train_data[i] = data[i]
-        for j in range(40000):
-            eval_data[j] = data[160000 + j]
-        print('data loading done!')
+        Teapots_PATH='/home/cristianmeo/Datasets/teapots/teapots.npz'
+        data = Teapots(Teapots_PATH)
+        data_n_split = int(data.images.shape[0]*0.8)
+        train_data = data.images[:data_n_split]
+        eval_data = data.images[data_n_split:]
 
     if args.dataset == "cifar10":
-
-       
         from pythae.models.nn.benchmarks.cifar10 import Encoder_Conv_VAE_CIFAR10 as Encoder_VAE
-
         if args.SBD:
             from pythae.models.nn.benchmarks.cifar10 import Decoder_Conv_VAE_CIFAR10 as Decoder_VAE
         else:
@@ -298,18 +219,12 @@ def main(args):
             [transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             transforms.Resize(image_size)])
-
         train_data = datasets.CIFAR10(root='./data', train=True,
                                                 download=True, transform=transform).data.transpose((0, 3, 1, 2))/255
     
-
         eval_data = datasets.CIFAR10(root='./data', train=False,
                                                download=True, transform=transform).data.transpose((0, 3, 1, 2))/255
-       
 
-        #classes = ('plane', 'car', 'bird', 'cat',
-        #           'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-        
 
     logger.info("Successfully loaded data !\n")
     logger.info("------------------------------------------------------------")
@@ -324,24 +239,8 @@ def main(args):
 
     data_input_dim = tuple(train_data.shape[1:])
 
-    if args.model_name == "ae":
-        from pythae.models import AE, AEConfig
 
-        if args.model_config is not None:
-            model_config = AEConfig.from_json_file(args.model_config)
-
-        else:
-            model_config = AEConfig()
-
-        model_config.input_dim = data_input_dim
-
-        model = AE(
-            model_config=model_config,
-            encoder=Encoder_VAE(model_config),
-            decoder=Decoder_VAE(model_config),
-        )
-
-    elif args.model_name == "disentangled_beta_vae":
+    if args.model_name == "disentangled_beta_vae":
         from pythae.models import DisentangledBetaVAE, DisentangledBetaVAEConfig
 
         if args.model_config is not None:
@@ -377,6 +276,25 @@ def main(args):
         model_config.beta = args.beta
 
         model = TCVAE(
+            model_config=model_config,
+            encoder=Encoder_VAE(model_config),
+            decoder=Decoder_VAE(model_config),
+        )
+
+    elif args.model_name == "beta_tc_vae":
+        from pythae.models import BetaTCVAE, BetaTCVAEConfig
+
+        if args.model_config is not None:
+            model_config = BetaTCVAEConfig.from_json_file(args.model_config)
+
+        else:
+            model_config = BetaTCVAEConfig()
+
+        model_config.input_dim = data_input_dim
+        model_config.latent_dim = args.latent_dim
+        model_config.beta = args.beta
+
+        model = BetaTCVAE(
             model_config=model_config,
             encoder=Encoder_VAE(model_config),
             decoder=Decoder_VAE(model_config),
@@ -483,8 +401,6 @@ def main(args):
         kwargs['use_hpc'] = True
     else:
         kwargs['use_hpc'] = None
-
-
 
     pipeline = TrainingPipeline(training_config=training_config, model=model, kwargs=kwargs)
 

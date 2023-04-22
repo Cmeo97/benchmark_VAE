@@ -4,6 +4,9 @@ from torch.utils.data import DataLoader
 import numpy as np
 import torch
 import os
+import pandas as pd
+from sklearn.manifold import TSNE
+from plotnine import *
 from typing import Any, Dict, List, Optional, Callable, Tuple, Union
 from ..customexception import DatasetError
 from ..data.preprocessors import BaseDataset, DataProcessor
@@ -11,11 +14,13 @@ from ..models import BaseAE
 from ..trainers import *
 from ..trainers.training_callbacks import TrainingCallback
 from .base_pipeline import Pipeline
-from pythae.DisentanglementMetrics import estimate_JEMMIG_cupy, estimate_SEP_cupy, estimate_SEPIN_torch
+from pythae.DisentanglementMetrics import estimate_JEMMIG_torch, estimate_SEP_cupy, estimate_SEPIN_torch_full
 from pythae.trainers.trainer_utils import set_seed
 import torchvision
 import matplotlib.pyplot as plt
+from pythae.fid_score import calculate_fid_given_tensors
 from imageio import imwrite
+from pythae.dci import dci
 logger = logging.getLogger(__name__)
 
 # make it print to the console.
@@ -50,7 +55,8 @@ class EvaluationPipeline(Pipeline):
         self,
         model: Optional[BaseAE],
         eval_loader: Union[np.ndarray, torch.Tensor, torch.utils.data.Dataset],
-        device
+        device, 
+        eval_data_with_labels = None
     ):
 
         set_seed(0)
@@ -66,36 +72,39 @@ class EvaluationPipeline(Pipeline):
         self.model = model.to(self.device)
         print(self.model)
 
-        if isinstance(eval_loader, torch.utils.data.Dataset):
-            print('evaluation_loader_loaded')
+        if eval_data_with_labels is not None: 
+            self.eval_loader = self.get_eval_dataloader(eval_data_with_labels)
         else:
-
-        #if isinstance(train_data, np.ndarray) or isinstance(train_data, torch.Tensor):
-#
-        #    logger.info("Preprocessing train data...")
-        #    train_data = self.data_processor.process_data(train_data)
-        #    train_dataset = self.data_processor.to_dataset(train_data)
-#
-        #else:
-        #    train_dataset = train_data
-
-        #if eval_data is not None:
-            if isinstance(eval_loader, np.ndarray) or isinstance(eval_loader, torch.Tensor):
-                logger.info("Preprocessing eval data...\n")
-        
-                eval_data = self.data_processor.process_data(eval_loader)
-                eval_dataset = self.data_processor.to_dataset(eval_data)
-                self.eval_loader = self.get_eval_dataloader(eval_dataset)
+            if isinstance(eval_loader, torch.utils.data.Dataset):
+                print('evaluation_loader_loaded')
             else:
-                self.eval_loader = eval_loader
+
+            #if isinstance(train_data, np.ndarray) or isinstance(train_data, torch.Tensor):
+#   
+            #    logger.info("Preprocessing train data...")
+            #    train_data = self.data_processor.process_data(train_data)
+            #    train_dataset = self.data_processor.to_dataset(train_data)
+#   
+            #else:
+            #    train_dataset = train_data
+
+                if isinstance(eval_loader, np.ndarray) or isinstance(eval_loader, torch.Tensor):
+                    logger.info("Preprocessing eval data...\n")
+
+                    eval_data = self.data_processor.process_data(eval_loader)
+                    eval_dataset = self.data_processor.to_dataset(eval_data)
+                    self.eval_loader = self.get_eval_dataloader(eval_dataset)
+                    print('evaluation_loader_loaded')
+                else:
+                    self.eval_loader = eval_loader
+                    print('evaluation_loader_loaded')
+            
         
 
         
        
 
-    def disentanglement_metrics(
-        self
-    ):
+    def disentanglement_metrics(self, labels_flag=False, model_name=None):
         """
         Launch the model training on the provided data.
 
@@ -125,37 +134,77 @@ class EvaluationPipeline(Pipeline):
 
         all_z_mean = []
         all_z_std = []
-        for inputs in self.eval_loader:
+        all_y = []
+        all_mu = []
+        if labels_flag:
+            for inputs, labels in self.eval_loader:
 
-            inputs = self._set_inputs_to_device(inputs)
+                inputs = inputs.to(self.device)
 
-            x = inputs["data"]
-            #print(x.shape)
-            encoder_output = self.model.encoder(x)
+                x = inputs
+                #print(x.shape)
+                encoder_output = self.model.encoder(x)
 
-            mu, log_var = encoder_output.embedding.detach().cpu().numpy(), encoder_output.log_covariance
+                mu, log_var = encoder_output.embedding.detach().cpu().numpy(), encoder_output.log_covariance
 
-            std = torch.exp(0.5 * log_var).detach().cpu().numpy()
-            all_z_mean.append(mu)
-            all_z_std.append(std)
-        
+                std = torch.exp(0.5 * log_var).detach().cpu().numpy()
+
+                all_z_mean.append(mu)
+                all_z_std.append(std)
+                all_y.append(labels)
+                all_mu.append(mu)
+
+            y = np.concatenate(all_y, 0)
+        else: 
+            for inputs in self.eval_loader:
+
+                inputs = self._set_inputs_to_device(inputs)
+
+                x = inputs["data"]
+                #print(x.shape)
+                encoder_output = self.model.encoder(x)
+
+                mu, log_var = encoder_output.embedding.detach().cpu().numpy(), encoder_output.log_covariance
+
+                std = torch.exp(0.5 * log_var).detach().cpu().numpy()
+
+                all_z_mean.append(mu)
+                all_z_std.append(std)
+                all_mu.append(mu)
+
+              
 
         z_mean = np.concatenate(all_z_mean, 0)
         z_std = np.concatenate(all_z_std, 0)
-        #Disentanglement Metrics
-    
-        #results_JEMMIG = estimate_JEMMIG_cupy(z_mean, z_std, num_samples=10000,
-        #                      batch_size=5, gpu=0)
-        #results_SEP = estimate_SEP_cupy(z_mean, z_std, num_samples=10000,
-        #                      batch_size=5, gpu=0)
-        results_SEPIN = estimate_SEPIN_torch(z_mean, z_std, self.device, num_samples=10000,
+       
+        
+        results = estimate_SEPIN_torch_full(z_mean, z_std, self.device, num_samples=10000,
                           batch_size=250)
-        #Sep_zi = np.array(results_SEPIN['SEP_zi'])
-        #wandb.log({
-        #'Sep_zi': Sep_zi,
-        #}, step=epoch)
+        if labels_flag:
+            results_jemmig = estimate_JEMMIG_torch(z_mean, z_std, y, num_samples=10000, batch_size=250, device=self.device)   
+            
+        all_mu = np.concatenate(all_mu, 0)
+        results_dci = {}
+        if labels_flag:
+          
+            print('calculating DCI')
+            for reg_model in ['lasso', 'random_forest']:
+                # First parameter in latent space is dummy and therefore ignored.
+                if model_name=='TorusVAE' :
+                    disentanglement, completeness, informativeness, _ = dci(y, all_mu[:, 1:], model=reg_model)
+                else:
+                    disentanglement, completeness, informativeness, _ = dci(y, all_mu, model=reg_model)
+                
+                results_dci[reg_model] = {'disentanglement': disentanglement.item(), 'completeness': completeness.item(),
+                           'informativeness': informativeness.item()}
+        
+                
+                
 
-        return results_SEPIN
+        if labels_flag:
+            return results, results_jemmig, results_dci
+        else:
+            return results
 
 
     def sample(
@@ -165,6 +214,7 @@ class EvaluationPipeline(Pipeline):
         output_dir: str = None,
         return_gen: bool = True,
         save_sampler_config: bool = False,
+        labels: bool = False,
     ) -> torch.Tensor:
         """Main sampling function of the sampler.
 
@@ -188,47 +238,35 @@ class EvaluationPipeline(Pipeline):
 
         x_gen_list = []
         latent_dim = self.model.encoder.latent_dim
-        for i in range(full_batch_nbr):
-            z = torch.randn(batch_size, latent_dim).to(self.device)
-            x_gen = self.model.decoder(z)["reconstruction"].detach()
-
-            if output_dir is not None:
-                for j in range(batch_size):
-                    self.save_img(
-                        x_gen[j], output_dir+'/generated_images', "%08d.png" % int(batch_size * i + j)
-                    )
-
-            x_gen_list.append(x_gen)
-
-        if last_batch_samples_nbr > 0:
-            z = torch.randn(batch_size, latent_dim).to(
-                self.device
-            )
-            
-            x_gen = self.model.decoder(z)["reconstruction"].detach()
-
-            if output_dir is not None:
-                for j in range(last_batch_samples_nbr):
-                    self.save_img(
-                        x_gen[j],
-                        output_dir+'/generated_images',
-                        "%08d.png" % int(batch_size * full_batch_nbr + j),
-                    )
+        
         c=0
-        for inputs in self.eval_loader:
+        if labels:
+            for inputs, _ in self.eval_loader:
 
-            inputs = self._set_inputs_to_device(inputs)
+                inputs = inputs.to(self.device)
+                encoder_output = self.model.encoder(inputs)
+                mu, log_var = encoder_output.embedding, encoder_output.log_covariance
 
-            x = inputs["data"]
-            #print(x.shape)
-            encoder_output = self.model.encoder(x)
+                c += 1
+                if c==30:
 
-            mu, log_var = encoder_output.embedding, encoder_output.log_covariance
-            
-            c += 1
-            if c==30:
+                    break
+        else: 
+            for inputs in self.eval_loader:
 
-                break
+                inputs = self._set_inputs_to_device(inputs)
+
+                x = inputs["data"]
+                #print(x.shape)
+                encoder_output = self.model.encoder(x)
+
+                mu, log_var = encoder_output.embedding, encoder_output.log_covariance
+
+                c += 1
+                if c==30:
+
+                    break
+
 
 
         std = torch.exp(0.5 * log_var)
@@ -257,7 +295,154 @@ class EvaluationPipeline(Pipeline):
             return torch.cat(x_gen_list, dim=0)
 
 
+    def t_sne_plot(
+        self,
+        model_name: str = None,
+        labels: bool = False,
+    ) -> torch.Tensor:
+        """Main sampling function of the sampler.
 
+        Args:
+            num_samples (int): The number of samples to generate
+            batch_size (int): The batch size to use during sampling
+            output_dir (str): The directory where the images will be saved. If does not exist the
+                folder is created. If None: the images are not saved. Defaults: None.
+            return_gen (bool): Whether the sampler should directly return a tensor of generated
+                data. Default: True.
+            save_sampler_config (bool): Whether to save the sampler config. It is saved in
+                output_dir.
+
+        Returns:
+            ~torch.Tensor: The generated images
+        """
+        
+
+        c = 0
+        if labels:
+            for inputs, _ in self.eval_loader:
+
+                inputs = inputs.to(self.device)
+                encoder_output = self.model.encoder(inputs)
+                mu, log_var = encoder_output.embedding, encoder_output.log_covariance
+
+                c += 1
+                if c==5:
+
+                    break
+        else: 
+            for inputs in self.eval_loader:
+
+                inputs = self._set_inputs_to_device(inputs)
+
+                x = inputs["data"]
+                #print(x.shape)
+                encoder_output = self.model.encoder(x)
+
+                mu, log_var = encoder_output.embedding, encoder_output.log_covariance
+
+                c += 1
+                if c==5:
+
+                    break
+
+
+
+        std = torch.exp(0.5 * log_var)
+        z = mu + std * torch.randn_like(std)
+
+        z_tsne = []
+        delta = np.linspace(-25, 25, 11)
+        for l in range(100):
+            for i in range(z.shape[1]):
+                for j in range(11):
+                    z[l, i] = z[l, i] + delta[j]*std[l, i]
+                    z_tsne.append(z[l].detach().cpu().numpy())
+                    z[l, i] = z[l, i] - delta[j]*std[l, i]
+         
+        latent_space = np.concatenate(z_tsne, 0)
+        tsne_latent_space = TSNE(n_components=2).fit_transform(latent_space.reshape(-1, 10))
+        tsne_df = pd.DataFrame(tsne_latent_space, columns=['x1', 'x2'])
+        
+        #loaded_df = pd.read_csv("data.csv")
+        plot = (ggplot(tsne_df)
+        + geom_point(aes(x='x1', y='x2'), size = 0.5)
+        + ggtitle(f't-SNE Plot of Latent Space: {model_name}')
+        + theme(axis_text=element_text(size=8))
+        + theme(axis_title=element_text(size=10, weight='bold'))
+        + theme(plot_title=element_text(size=14, weight='bold'))
+        )
+
+        # Save the plot
+        ggsave(plot, f'tsne_plot_{model_name}.png', dpi = 300)
+
+        
+        return tsne_df
+
+
+    def compute_eval_scores(
+        self,
+        labels: bool = False,
+    ) -> torch.Tensor:
+        """Main sampling function of the sampler.
+
+        Args:
+            num_samples (int): The number of samples to generate
+            batch_size (int): The batch size to use during sampling
+            output_dir (str): The directory where the images will be saved. If does not exist the
+                folder is created. If None: the images are not saved. Defaults: None.
+            return_gen (bool): Whether the sampler should directly return a tensor of generated
+                data. Default: True.
+            save_sampler_config (bool): Whether to save the sampler config. It is saved in
+                output_dir.
+
+        Returns:
+            ~torch.Tensor: The generated images
+        """
+        imgs = []
+        true_imgs = []
+        mse = 0
+        if labels:
+            i = 0
+            for inputs, _ in self.eval_loader:
+
+                inputs = inputs.to(self.device)
+                x = {"data": inputs}
+                model_output = self.model(x)
+
+                mse += model_output.reconstruction_loss.item()
+
+                true_imgs.append(inputs)
+                imgs.append(model_output.recon_x)
+                print(i)
+                i += 1
+                if i == 5:
+                    break
+
+                
+        else: 
+            for inputs in self.eval_loader:
+
+                inputs = self._set_inputs_to_device(inputs)
+
+                x = inputs["data"]
+          
+                model_output = self.model(x)
+
+                mse += model_output.reconstruction_loss.item()
+                true_imgs.append(x)
+                imgs.append(model_output.recon_x)
+
+        mse = mse / 4000
+        
+        FID_score_2048 = calculate_fid_given_tensors(torch.cat(true_imgs, 0), torch.cat(imgs, 0), device='cuda', batch_size=32, dims=2048).item()  
+
+        return mse, FID_score_2048
+              
+
+
+
+
+        
 
 
 

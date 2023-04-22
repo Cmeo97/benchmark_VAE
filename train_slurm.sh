@@ -28,7 +28,7 @@ dec_celeba=$9
 ExpName=${model_name}"_"${dataset}"_"${seed}"_"${beta}"_"${alpha}"_"${C}"_"${latent_dim}"_"${enc_celeba}"_"${dec_celeba}
 echo "Training of experiment: ${ExpName}"
 
-nohup python examples/scripts/training.py \
+python examples/scripts/training.py \
 --dataset=${dataset} \
 --model_name=${model_name} \
 --model_config=/home/cristianmeo/benchmark_VAE/examples/scripts/configs/${dataset}/${model_name}_config.json \

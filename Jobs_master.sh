@@ -36,7 +36,7 @@ do
 							do
 								for encoder in "${All_encoder[@]}"
 								do
-                				bash train.sh $Dataset $Method $latent_dim $seed $beta $alpha $C $encoder $decoder &
+                				bash validation.sh $Dataset $Method $latent_dim $seed $beta $alpha $C $encoder $decoder &
 								done
 							done 
 						done
