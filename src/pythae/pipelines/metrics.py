@@ -204,7 +204,7 @@ class EvaluationPipeline(Pipeline):
         if labels_flag:
             return results, results_jemmig, results_dci
         else:
-            return results
+            return None, results['SEPIN_zi']
 
 
     def sample(
@@ -349,7 +349,7 @@ class EvaluationPipeline(Pipeline):
 
         std = torch.exp(0.5 * log_var)
         z = mu + std * torch.randn_like(std)
-
+        labels_fovs = []
         z_tsne = []
         delta = np.linspace(-25, 25, 11)
         for l in range(100):
@@ -358,22 +358,33 @@ class EvaluationPipeline(Pipeline):
                     z[l, i] = z[l, i] + delta[j]*std[l, i]
                     z_tsne.append(z[l].detach().cpu().numpy())
                     z[l, i] = z[l, i] - delta[j]*std[l, i]
+                    labels_fovs.append(i)
          
         latent_space = np.concatenate(z_tsne, 0)
+        labels = np.concatenate(labels_fovs, 0)
         tsne_latent_space = TSNE(n_components=2).fit_transform(latent_space.reshape(-1, 10))
         tsne_df = pd.DataFrame(tsne_latent_space, columns=['x1', 'x2'])
+        tsne_df['labels'] = labels
+        tsne_df['labels'] = tsne_df['labels'].astype('category')
+        tsne =  tsne_df.iloc[0:5000]
         
         #loaded_df = pd.read_csv("data.csv")
         plot = (ggplot(tsne_df)
-        + geom_point(aes(x='x1', y='x2'), size = 0.5)
+        + geom_point(aes(x='x1', y='x2', color='labels'), size = 2)
+        + xlab("Dimension 1")
+        + ylab("Dimension 2")
         + ggtitle(f't-SNE Plot of Latent Space: {model_name}')
-        + theme(axis_text=element_text(size=8))
-        + theme(axis_title=element_text(size=10, weight='bold'))
+        + theme(axis_text=element_text(size=12))
+        + theme(axis_title=element_text(size=12, weight='bold'))
         + theme(plot_title=element_text(size=14, weight='bold'))
+        + theme(legend_title=element_text(size=18, weight='bold'))
+        + guides(color=guide_legend(title="Fov"))
+        + guides(color=guide_legend(keywidth=20, keyheight=20))
         )
 
         # Save the plot
-        ggsave(plot, f'tsne_plot_{model_name}.png', dpi = 300)
+        ggsave(plot, f'tsne_plot_{model_name}.png', dpi = 1500)
+        ggsave(plot, f'tsne_plot_{model_name}.pdf', dpi = 1500)
 
         
         return tsne_df

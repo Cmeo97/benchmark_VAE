@@ -299,9 +299,21 @@ def main(args):
     #                else:
     #                    with open(f'experiments/disentanglement_metrics/{args.dataset}/results_informativeness_random_forest.json', "w+") as jsonFile:
     #                        json.dump([results], jsonFile)
-    
-    
-
+#
+    #
+    ## Compute visual scores 
+    #mse, fid = evaluation_pipeline.compute_eval_scores(True)
+#
+    #results = {'model_name': str(args.exp_name), 'FID': str(fid), 'MSE': str(mse)}
+    #if os.path.exists(f'experiments/validation_scores/{args.dataset}/visual_scores_results.json'):
+    #    with open(f'experiments/validation_scores/{args.dataset}/visual_scores_results.json', "r") as jsonFile:
+    #        data = json.load(jsonFile)
+    #    data.append(results)
+    #    with open(f'experiments/validation_scores/{args.dataset}/visual_scores_results.json', "w+") as jsonFile:
+    #        json.dump(data, jsonFile)
+    #else:
+    #    with open(f'experiments/validation_scores/{args.dataset}/visual_scores_results.json', "w+") as jsonFile:
+    #        json.dump([results], jsonFile)
 
 
 if __name__ == "__main__":

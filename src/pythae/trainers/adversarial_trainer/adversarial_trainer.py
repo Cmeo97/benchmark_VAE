@@ -473,15 +473,15 @@ class AdversarialTrainer(BaseTrainer):
             eval_loader=self.eval_loader
             )    
             print('Disentanglement Metrics at epoch: ', epoch)
-            disentanglement_metrics, normalized_SEPIN = evaluation_pipeline.disentanglement_metrics()
-           
-            idx_min_SEPIN = np.argmin(normalized_SEPIN)
-            min_SEPIN = normalized_SEPIN[idx_min_SEPIN]
-
-            for i in range(normalized_SEPIN.shape[0]):
-                name_metric='train_SEPIN_'+str(i)
-                logs[name_metric] = normalized_SEPIN[i]
-
+            if self.model.latent_dim < 20:  
+                disentanglement_metrics, normalized_SEPIN = evaluation_pipeline.disentanglement_metrics()
+            
+                idx_min_SEPIN = np.argmin(normalized_SEPIN)
+                min_SEPIN = normalized_SEPIN[idx_min_SEPIN]
+    
+                for i in range(normalized_SEPIN.shape[0]):
+                    name_metric='train_SEPIN_'+str(i)
+                    logs[name_metric] = normalized_SEPIN[i]
             #if min_SEPIN < 1e-5 and self.update_architecture:
             #    perturbations = []
             #    idxs = np.where(normalized_SEPIN<1e-5)
