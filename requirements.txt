@@ -8,3 +8,5 @@ tqdm
 typing_extensions
 dataclasses>=0.6
 pickle5
+torch
+plotnine
