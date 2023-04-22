@@ -7,14 +7,13 @@ seed=$4
 beta=$5
 alpha=$6
 C=$7
-enc_celeba=True
-dec_celeba=False
-#imbalance_percentage=$8
 
-ExpName=${model_name}"_"${dataset}"_"${seed}"_"${beta}"_"${alpha}"_"${C}"_"${latent_dim}"_"${enc_celeba}"_"${dec_celeba}
+
+
+ExpName=${model_name}"_"${dataset}"_"${seed}"_"${beta}"_"${alpha}"_"${C}"_"${latent_dim}
 echo "Training of experiment: ${ExpName}"
 
-nohup python examples/scripts/training.py \
+python examples/scripts/training.py \
 --dataset=${dataset} \
 --model_name=${model_name} \
 --model_config=/users/cristianmeo/benchmark_VAE/examples/scripts/configs/${dataset}/${model_name}_config.json \
@@ -27,11 +26,17 @@ nohup python examples/scripts/training.py \
 --latent_dim=${latent_dim} \
 --name_exp=${ExpName} \
 --data_path=$DATA_PATH \
---enc_celeba=${enc_celeba} \
---SBD=${SBD} \
-#--imbalance_percentage=${imbalance_percentage} \
-> logs/${dataset}/${ExpName}.out 2> logs/${dataset}/${ExpName}.err 
-
+#> logs/${ExpName}.out 2> logs/${ExpName}.err 
+#echo "Evaluation of experiment: ${ExpName}"
+#python examples/scripts/validation.py \
+#--dataset=${dataset} \
+#--model_name=${model_name} \
+#--model_config=/home/cristianmeo/benchmark_VAE/examples/scripts/configs/${dataset}/${model_name}_config.json \
+#--training_config=/home/cristianmeo/benchmark_VAE/examples/scripts/configs/${dataset}/base_training_config.json \
+#--exp_name=${ExpName} \
+#--data_path=$DATA_PATH \
+#--enc_celeba=${enc_celeba} \
+#--dec_celeba=${dec_celeba} \
 
 
 
