@@ -677,7 +677,7 @@ class BaseTrainer:
 
             if self.model.latent_dim < 20:    
                 print('Disentanglement Metrics at epoch: ', epoch)
-                disentanglement_metrics, normalized_SEPIN = evaluation_pipeline.disentanglement_metrics()
+                disentanglement_metrics, normalized_SEPIN = evaluation_pipeline.disentanglement_metrics(labels_flag=False)
 
                 idx_min_SEPIN = np.argmin(normalized_SEPIN)
                 min_SEPIN = normalized_SEPIN[idx_min_SEPIN]
