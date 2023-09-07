@@ -82,9 +82,12 @@ class BetaTCVAE(VAE):
         output = ModelOutput(
             reconstruction_loss=recon_loss,
             reg_loss=kld,
+            cvib_loss=kld*0.00,
             loss=loss,
             recon_x=recon_x,
             z=z,
+            mu=mu,
+            std=std,
         )
 
         return output

@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from sklearn.utils import shuffle
 from pythae.data.preprocessors import DataProcessor
-from pythae.data.datasets import CelebADataset
+from pythae.data.datasets import CelebADataset, TeapotsDataset_with_labels
 from pythae.models import RHVAE
 from pythae.models.rhvae import RHVAEConfig
 from pythae.pipelines import TrainingPipeline
@@ -33,7 +33,7 @@ ap.add_argument(
     "--dataset",
     type=str,
     default="mnist",
-    choices=["mnist", "cifar10", "celeba","dsprites", "3Dshapes", "colored-dsprites"],
+    choices=["mnist", "cifar10", "celeba","dsprites", "3Dshapes", "colored-dsprites", "teapots"],
     help="The data set to use to perform training. It must be located in the folder 'data' at the "
     "path 'data/datset_name/' and contain a 'train_data.npz' and a 'eval_data.npz' file with the "
     "data being under the key 'data'. The data must be in the range [0-255] and shaped with the "
@@ -186,46 +186,100 @@ ap.add_argument(
     default="benchmark_team",
 )
 
+ap.add_argument(
+    "--imbalance_percentage",
+    help='percentage of samples to be removed for a given factor of variation',
+    type=float,
+    default=3,
+)
+
+
 args = ap.parse_args()
 
 
 def main(args):
 
-            
+        
     if args.dataset == "3Dshapes": 
         print(args.data_path)
         from pythae.models.nn.benchmarks.shapes import Encoder_Conv_VAE_3DSHAPES as Encoder_VAE
         from pythae.models.nn.benchmarks.shapes import SBD_Conv_VAE_3DSHAPES as Decoder_VAE
         dataset = h5py.File(args.data_path+'3dshapes.h5', 'r')
         
-        data =  shuffle(np.array(dataset['images']).transpose((0, 3, 1, 2))/ 255.0)
+        labels = np.array(dataset['labels'])
+        #itemindex = np.where(labels[:,4] == 3)[0]
+        #data = np.delete(data, itemindex[0:int(itemindex.shape[0]*args.imbalance_percentage)], 0)
+        idx_0 = np.where(labels[:, 4] == 0)[0]
+        idx_1 = np.where(labels[:, 4] == 1)[0]
+        idx_2 = np.where(labels[:, 4] == 2)[0]
+        idx_3 = np.where(labels[:, 4] == 3)[0]
+        f_idx_0 = shuffle(idx_0)[:int(idx_0.shape[0]*args.imbalance_percentage/3)]
+        f_idx_2 = shuffle(idx_2)[:int(idx_2.shape[0]*args.imbalance_percentage/3)]
+        f_idx_3 = shuffle(idx_3)[:int(idx_3.shape[0]*args.imbalance_percentage/3)]
+        idx = np.concatenate((idx_1, f_idx_0, f_idx_2, f_idx_3))
+        data =  shuffle(np.array(dataset['images'])[idx].transpose((0, 3, 1, 2))/ 255.0)
+        data_n_split = int(data.shape[0]*0.8)
+        train_data = data[:data_n_split]
+        eval_data = data[data_n_split:]
+
+
+    if args.dataset == "teapots":
+
+        from pythae.models.nn.benchmarks.teapots import Encoder_Conv_VAE_TEAPOTS as Encoder_VAE
+      
+        if args.dec_celeba:   #It is the opposite: SBD false uses SBD, just to be consistent with previous notion
+            from pythae.models.nn.benchmarks.teapots import Decoder_Conv_VAE_TEAPOTS as Decoder_VAE
+        else:
+            from pythae.models.nn.benchmarks.teapots import SBD_Conv_VAE_TEAPOTS as Decoder_VAE
+        
+        
+
+        img_folder=args.data_path+'teapots/'
+
+        # Load the dataset from file and apply transformations
+        data = TeapotsDataset_with_labels(f'{img_folder}')
+        _, label_example = data[0]
+        num_classes = label_example.shape[0]
+        train_data = np.zeros((160000, 3, 64, 64), float)
+        eval_data = np.zeros((40000, 3, 64, 64), float)
+        train_label = np.zeros((160000, num_classes), float)
+        eval_label = np.zeros((40000, num_classes), float)
+        data_n_split = 160000
+        
+        for i in range(160000):
+            train_data[i], train_label[i] = data[i]
+        for j in range(40000):
+            eval_data[j], eval_label[j] = data[160000 + j]
+        print('data loading done!')
+
+        #itemindex = np.where(train_label[:,2] < args.imbalance_percentage)[0]
+        #train_data = train_data[itemindex]
+
+        task = 'segmentation'
+
+    if args.dataset == "cifar10":
+
+       
+        from pythae.models.nn.benchmarks.cifar10 import Encoder_Conv_VAE_CIFAR10 as Encoder_VAE
+
+        if args.dec_celeba:
+            from pythae.models.nn.benchmarks.cifar10 import Decoder_Conv_VAE_CIFAR10 as Decoder_VAE
+        else:
+            from pythae.models.nn.benchmarks.cifar10 import SBD_Conv_VAE_CIFAR10 as Decoder_VAE
+
+        image_size=64
+        transform = transforms.Compose(
+            [transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+            transforms.Resize(image_size)])
+
+        train_data = datasets.CIFAR10(root='./data', train=True,
+                                                download=True, transform=transform).data.transpose((0, 3, 1, 2))/255
     
-        train_data = data[:int(data.shape[0]*0.8)]
-        eval_data = data[int(data.shape[0]*0.8):]
 
-    if args.dataset == "dsprites":
-
-        from pythae.models.nn.benchmarks.dsprites import Encoder_Conv_VAE_DSPRITES as Encoder_VAE
-        from pythae.models.nn.benchmarks.dsprites import SBD_Conv_VAE_DSPRITES as Decoder_VAE
-        #from pythae.models.nn.benchmarks.dsprites import Decoder_Conv_VAE_DSPRITES as Decoder_VAE
-        dataset = h5py.File(args.data_path+'dsprites-dataset/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.hdf5', 'r')
-        image_data =  np.expand_dims(np.array(dataset['imgs']), 1)
-
-        train_data = image_data[:int(image_data.shape[0]*0.8)]
-        eval_data = image_data[int(image_data.shape[0]*0.8):]
-
-    if args.dataset == "colored-dsprites":
-
-        from pythae.models.nn.benchmarks.colored_dsprites import Encoder_Conv_VAE_CDSPRITES as Encoder_VAE
-        from pythae.models.nn.benchmarks.colored_dsprites import SBD_Conv_VAE_CDSPRITES as Decoder_VAE
-        #from pythae.models.nn.benchmarks.dsprites import Decoder_Conv_VAE_DSPRITES as Decoder_VAE
-        train_dataset = h5py.File(args.data_path+'dsprites_train_data.h5', 'r')
-        eval_dataset = h5py.File(args.data_path+'dsprites_test_data.h5', 'r')
-        print(train_dataset['data'])
-
-        train_data = shuffle(np.array(train_dataset['data']).reshape((train_dataset['data'].shape[0]*train_dataset['data'].shape[1], 32, 32, 3)).transpose((0, 3, 1, 2))/ 255.0) 
-        eval_data = shuffle(np.array(eval_dataset['data']).reshape((eval_dataset['data'].shape[0]*eval_dataset['data'].shape[1], 32, 32, 3)).transpose((0, 3, 1, 2))/ 255.0) 
-
+        eval_data = datasets.CIFAR10(root='./data', train=False,
+                                               download=True, transform=transform).data.transpose((0, 3, 1, 2))/255
+       
     if args.dataset == "celeba":
         if args.enc_celeba:
             from pythae.models.nn.benchmarks.celeba import Encoder_Conv_VAE_CELEBA as Encoder_VAE
@@ -301,6 +355,25 @@ def main(args):
         model_config.beta = args.beta
 
         model = DisentangledBetaVAE(
+            model_config=model_config,
+            encoder=Encoder_VAE(model_config),
+            decoder=Decoder_VAE(model_config),
+        )
+
+    elif args.model_name == "beta_tc_vae":
+        from pythae.models import BetaTCVAE, BetaTCVAEConfig
+
+        if args.model_config is not None:
+            model_config = BetaTCVAEConfig.from_json_file(args.model_config)
+
+        else:
+            model_config = BetaTCVAEVAEConfig()
+
+        model_config.input_dim = data_input_dim
+        model_config.latent_dim = args.latent_dim
+        model_config.beta = args.beta
+
+        model = BetaTCVAE(
             model_config=model_config,
             encoder=Encoder_VAE(model_config),
             decoder=Decoder_VAE(model_config),
@@ -439,3 +512,5 @@ def main(args):
 if __name__ == "__main__":
 
     main(args)
+
+

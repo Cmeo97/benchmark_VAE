@@ -1,6 +1,6 @@
 {
     "name": "FactorVAEConfig",
-    "latent_dim": 64,
+    "latent_dim": 48,
     "reconstruction_loss": "mse",
     "gamma": 10
 }

@@ -22,3 +22,4 @@ class BetaTCVAEConfig(VAEConfig):
     beta: float = 1.0
     gamma: float = 1.0
     use_mss: bool = True
+    latent_dim: int = 10

@@ -7,12 +7,14 @@
 #SBATCH --gres=gpu
 #SBATCH --mem=120G     
 #SBATCH --ntasks=1                                
-#SBATCH --time=8:59:00
+#SBATCH --time=03:25:00
 #SBATCH -o /scratch/cristianmeo/output/tc-vae-%A.out  
 #SBATCH -e /scratch/cristianmeo/output/tc-vae-%A.err  
 
 module --quiet load miniconda3/4.12.0
 conda activate MARL
+
+#!/bin/bash
 
 dataset=$1
 model_name=$2
@@ -23,29 +25,19 @@ alpha=$6
 C=$7
 enc_celeba=True
 dec_celeba=False
+imbalance=$8
 
 
+ExpName=${model_name}"_"${dataset}"_"${seed}"_"${beta}"_"${alpha}"_"${C}"_"${latent_dim}"_"${enc_celeba}"_"${dec_celeba}"_"${imbalance}
+echo "validating experiment: ${ExpName}"
 
-ExpName=${model_name}"_"${dataset}"_"${seed}"_"${beta}"_"${alpha}"_"${C}"_"${latent_dim}"_"${enc_celeba}"_"${dec_celeba}
-echo "Training of experiment: ${ExpName}"
-
-nohup python examples/scripts/training.py \
+python examples/scripts/validation.py \
 --dataset=${dataset} \
 --model_name=${model_name} \
---model_config=/home/cristianmeo/benchmark_VAE/examples/scripts/configs/${dataset}/${model_name}_config.json \
 --training_config=/home/cristianmeo/benchmark_VAE/examples/scripts/configs/${dataset}/base_training_config.json \
---use_comet \
---seed=${seed} \
---beta=${beta} \
---C=${C} \
---alpha=${alpha} \
---latent_dim=${latent_dim} \
---name_exp=${ExpName} \
+--exp_name=${ExpName} \
 --data_path=$DATA_PATH \
---use_hpc \
---enc_celeba=${enc_celeba} \
---dec_celeba=${dec_celeba} \
-> 'logs/'${ExpName}'.out' 2> 'logs/'${ExpName}'.err'
+#> logs/${ExpName}"_validation".out 2> logs/${ExpName}"_validation".err 
 
 
 

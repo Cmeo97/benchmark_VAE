@@ -23,13 +23,13 @@ alpha=$6
 C=$7
 enc_celeba=True
 dec_celeba=False
+imbalance=$8
 
 
-
-ExpName=${model_name}"_"${dataset}"_"${seed}"_"${beta}"_"${alpha}"_"${C}"_"${latent_dim}"_"${enc_celeba}"_"${dec_celeba}
+ExpName=${model_name}"_"${dataset}"_"${seed}"_"${beta}"_"${alpha}"_"${C}"_"${latent_dim}"_"${enc_celeba}"_"${dec_celeba}"_"${imbalance}
 echo "Training of experiment: ${ExpName}"
 
-nohup python examples/scripts/training.py \
+python examples/scripts/training.py \
 --dataset=${dataset} \
 --model_name=${model_name} \
 --model_config=/home/cristianmeo/benchmark_VAE/examples/scripts/configs/${dataset}/${model_name}_config.json \
@@ -45,7 +45,7 @@ nohup python examples/scripts/training.py \
 --use_hpc \
 --enc_celeba=${enc_celeba} \
 --dec_celeba=${dec_celeba} \
-> 'logs/'${ExpName}'.out' 2> 'logs/'${ExpName}'.err'
+--imbalance=${imbalance} \
 
 
 
